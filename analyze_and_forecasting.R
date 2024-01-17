@@ -29,7 +29,9 @@ coefs_equations <- function(tbl,
                             'h_result', 'incident_name', 'stage_name', 'value_home', 'value_away', inc_name, 'coefs')
           
           DT |>
-            mutate(h_result = ifelse(clust_vars == 3, 'WIN', ifelse(clust_vars == 1, 'DRAW', 'LOST')))
+            mutate(delta = home_score_full - away_score_full) |>
+            mutate(h_result = ifelse(delta > 0, 'WIN', ifelse(delta == 0, 'DRAW', 'LOST'))) |>
+            select(-delta)
           
         } else {
           
@@ -78,7 +80,9 @@ coefs_equations <- function(tbl,
                             'h_result', 'incident_name', 'stage_name', 'value_home', 'value_away', inc_name, 'coefs')
           
           DT |>
-            mutate(h_result = ifelse(clust_vars == 3, 'WIN', ifelse(clust_vars == 1, 'DRAW', 'LOST')))
+            mutate(delta = home_score_full - away_score_full) |>
+            mutate(h_result = ifelse(delta < 0, 'WIN', ifelse(delta == 0, 'DRAW', 'LOST'))) |>
+            select(-delta)
           
         } else {
           
@@ -90,7 +94,7 @@ coefs_equations <- function(tbl,
         
         DT <- tbl[event_id == ev_id] |>
           mutate(delta = home_score_full - away_score_full) |>
-          mutate(clust_vars = ifelse(delta > 0, 3, ifelse(delta == 0, 1, 0)))
+          mutate(clust_vars = ifelse(delta < 0, 3, ifelse(delta == 0, 1, 0)))
         
         diag <- diag(ifelse(DT$value_away != 0, DT$value_away, 0.01))
         
@@ -138,7 +142,9 @@ coefs_equations_nm <- function(tbl,
                             'h_result', 'incident_name', 'stage_name', 'value_home', 'value_away', inc_name)
           
           DT |>
-            mutate(h_result = ifelse(clust_vars == 3, 'WIN', ifelse(clust_vars == 1, 'DRAW', 'LOST')))
+            mutate(delta = home_score_full - away_score_full) |>
+            mutate(h_result = ifelse(delta > 0, 'WIN', ifelse(delta == 0, 'DRAW', 'LOST'))) |>
+            select(-delta)
           
         } else {
           
@@ -174,7 +180,9 @@ coefs_equations_nm <- function(tbl,
                             'h_result', 'incident_name', 'stage_name', 'value_home', 'value_away', inc_name)
           
           DT |>
-            mutate(h_result = ifelse(clust_vars == 3, 'WIN', ifelse(clust_vars == 1, 'DRAW', 'LOST')))
+            mutate(delta = home_score_full - away_score_full) |>
+            mutate(h_result = ifelse(delta < 0, 'WIN', ifelse(delta == 0, 'DRAW', 'LOST'))) |>
+            select(-delta)
           
         } else {
           
@@ -186,7 +194,7 @@ coefs_equations_nm <- function(tbl,
         
         tbl[event_id == ev_id] |>
           mutate(delta = home_score_full - away_score_full) |>
-          mutate(clust_vars = ifelse(delta > 0, 3, ifelse(delta == 0, 1, 0))) |>
+          mutate(clust_vars = ifelse(delta < 0, 3, ifelse(delta == 0, 1, 0))) |>
           select(-delta) |>
           mutate(h_result = ifelse(clust_vars == 3, 'WIN', ifelse(clust_vars == 1, 'DRAW', 'LOST')))
         
