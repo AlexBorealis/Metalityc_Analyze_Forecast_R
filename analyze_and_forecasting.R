@@ -228,7 +228,7 @@ cmeans_cluster <- function(side = 'home',
                            team_name,
                            st_name,
                            cc = 0.5,
-                           cents = 6,
+                           cents = 3,
                            fuzz_deg = 1.5,
                            cntrl = NULL,
                            no_matrix = F) {
