@@ -29,4 +29,4 @@ source(paste0(getwd(), "/analyze_and_forecasting.R"), local = T)
 
 #mean_int_table <- map_dfr(teams_id, \(i) mean_goals_int(table = table_tournament_result_soccer, sport = 1, table_team = table_team_data_soccer, i))
 
-save.image(paste0(getwd(), "/Metalytic.RData"))
+save.image(getwd(), "/", list.files(getwd(), pattern = ".RData"))
