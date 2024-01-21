@@ -17,7 +17,7 @@ source(paste0(getwd(), "/flashlive_engine_(main_funs).R"), local = T)
 source(paste0(getwd(), "/flashlive_engine_(grouped_tbls).R"), local = T)
 
 ## Loading data processing engine (functions for analyzing and forecasting) ----
-source(paste0(getwd(), "/analyze_and_forecasting.R"), local = T)
+source(paste0(getwd(), "/analyzing.R"), local = T)
 
 #system.time(
   

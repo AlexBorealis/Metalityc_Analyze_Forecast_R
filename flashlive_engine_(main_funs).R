@@ -473,7 +473,8 @@ need_ids <- function(date = NULL) {
   
 }
 
-need_stats <- function(ev_id = NULL) {
+need_stats <- function(ev_id = NULL,
+                       st_name = NULL) {
   
   con <- dbConnect(drv = RPostgreSQL::PostgreSQL(),
                    user = "postgres", 
@@ -483,30 +484,68 @@ need_stats <- function(ev_id = NULL) {
   
   on.exit(dbDisconnect(con))
     
-  if (is.null(ev_id)) {
+  if (is.null(st_name)) {
     
-    data.table(
+    if (is.null(ev_id)) {
       
-      dbGetQuery(con, 'select event_id, incident_name,
-                          unnest(stage_name) "stage_name",
-                          unnest(value_home) "value_home",
-                          unnest(value_away) "value_away"
-                       from sport_data.soccer_statistics_g;')
+      data.table(
+        
+        dbGetQuery(con, 'select event_id, incident_name,
+                            unnest(stage_name) "stage_name",
+                            unnest(value_home) "value_home",
+                            unnest(value_away) "value_away"
+                         from sport_data.soccer_statistics_g;')
+        
+      )
       
-    )
+    } else {
+      
+      data.table(
+        
+        dbGetQuery(con, str_glue('select event_id, incident_name,
+                                    unnest(stage_name) "stage_name",
+                                    unnest(value_home) "value_home",
+                                    unnest(value_away) "value_away"
+                                  from sport_data.soccer_statistics_g
+                                  where event_id = \'{ev_id}\';'))
+        
+      )
+      
+    }
     
   } else {
     
-    data.table(
+    if (is.null(ev_id)) {
       
-      dbGetQuery(con, str_glue('select event_id, incident_name,
-                                  unnest(stage_name) "stage_name",
-                                  unnest(value_home) "value_home",
-                                  unnest(value_away) "value_away"
-                                from sport_data.soccer_statistics_g
-                                where event_id = {ev_id};'))
+      data.table(
+        
+        dbGetQuery(con, str_glue('select *
+                                  from (
+                                    select event_id, incident_name,
+                                      unnest(stage_name) "stage_name",
+                                      unnest(value_home) "value_home",
+                                      unnest(value_away) "value_away"
+                                    from sport_data.soccer_statistics_g) tab
+                                  where stage_name ilike \'{st_name}\';'))
+        
+      )
       
-    )
+    } else {
+      
+      data.table(
+        
+        dbGetQuery(con, str_glue('select *
+                                  from (
+                                    select event_id, incident_name,
+                                      unnest(stage_name) "stage_name",
+                                      unnest(value_home) "value_home",
+                                      unnest(value_away) "value_away"
+                                    from sport_data.soccer_statistics_g) tab
+                                  where event_id = \'{ev_id}\' and stage_name ilike \'{st_name}\';'))
+        
+      )
+      
+    }
     
   }
   
