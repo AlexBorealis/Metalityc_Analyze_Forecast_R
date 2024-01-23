@@ -5,9 +5,12 @@ library(DBI)
 library(pool, warn.conflicts = F)
 library(conflicted, warn.conflicts = F)
 library(tidyverse, warn.conflicts = F)
-conflicts_prefer(dplyr::select)
-conflicts_prefer(dplyr::filter)
-conflicts_prefer(data.table::`:=`)
+conflicts_prefer(dplyr::select(),
+                 dplyr::filter(),
+                 dplyr::lag(),
+                 dplyr::lead(),
+                 data.table::`:=`,
+                 caret::R2())
 library(data.table, warn.conflicts = F)
 setDTthreads(0)
 library(stringr)
@@ -53,3 +56,5 @@ library(randomForest)
 library(rattle)
 library(rpart)
 library(lmtest)
+library(boot)
+library(pls)
