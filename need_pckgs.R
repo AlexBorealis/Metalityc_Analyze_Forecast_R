@@ -10,7 +10,7 @@ conflicts_prefer(dplyr::select(),
                  dplyr::lag(),
                  dplyr::lead(),
                  data.table::`:=`,
-                 caret::R2())
+                 pls::R2())
 library(data.table, warn.conflicts = F)
 setDTthreads(0)
 library(stringr)
@@ -58,3 +58,6 @@ library(rpart)
 library(lmtest)
 library(boot)
 library(pls)
+library(FinTS, warn.conflicts = F)
+library(rugarch)
+library(urca)

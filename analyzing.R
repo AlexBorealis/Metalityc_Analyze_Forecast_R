@@ -33,17 +33,17 @@ modify_pca <- function(team_name,
   
   if (is.null(inc_name)) {
     
-    training.samples <- createDataPartition(DT$forecast$pts, p = p, list = F)
+    training.samples <- createDataPartition(DT$repaired_data$pts, p = p, list = F)
     
   } else {
     
-    training.samples <- createDataPartition(DT$forecast[[inc_name]], p = p, list = F)
+    training.samples <- createDataPartition(DT$repaired_data[[inc_name]], p = p, list = F)
     
   }
   
-  train.data  <- DT$forecast[training.samples]
+  train.data  <- DT$repaired_data[training.samples]
   
-  test.data <- DT$forecast[-training.samples]
+  test.data <- DT$repaired_data[-training.samples]
   
   list('model_pcr' = pcr(DT$formula_without_intercept, data = train.data, scale = T),
        'test_data' = test.data)

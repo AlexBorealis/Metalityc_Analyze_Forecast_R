@@ -123,7 +123,7 @@ generate_stats <- function(tbl,
                            d = 0,
                            q = 0,
                            n = 17,
-                           acc = 0.2,
+                           acc = 0.5,
                            inc_name) {
   
   repeat {
@@ -139,18 +139,34 @@ generate_stats <- function(tbl,
                        mean = mean(tbl$repaired_data[[inc_name]]),
                        n = n)
     
-    DT_arima <- data.table(start_time = tbl$real_stats$start_time,
-                           real = tbl$repaired_data[[inc_name]],
-                           arima = arima) |>
-      mutate(delta2 = (real - arima)^2,
-             ratio = abs((real - arima)/real)) |>
-      mutate(arima = round(arima, 2))
+    if (n == nrow(tbl$repaired_data)) {
+      
+      DT_arima <- data.table(start_time = tbl$real_stats$start_time,
+                             real = tbl$repaired_data[[inc_name]],
+                             arima = arima) |>
+        mutate(delta2 = (real - arima)^2,
+               ratio = abs((real - arima)/real)) |>
+        mutate(arima = round(arima, 2))
+      
+    } else {
+      
+      DT_arima <- data.table(start_time = tbl$real_stats$start_time,
+                             real = tbl$repaired_data[[inc_name]],
+                             arima = arima[1:nrow(tbl$repaired_data)]) |>
+        mutate(delta2 = (real - arima)^2,
+               ratio = abs((real - arima)/real)) |>
+        mutate(arima = round(arima, 2))
+      
+      truncated <- arima[(nrow(tbl$repaired_data) + 1):n]
+      
+    }
     
-    if (mean(DT_arima$ratio) < acc) break
+    if (max(abs(DT_arima$ratio)) < acc) break
     
   }
   
   return(list('model_arima' = model_arima,
-              'table_values' = DT_arima))
+              'table_values' = DT_arima,
+              'truncated_ts' = truncated))
   
 }
