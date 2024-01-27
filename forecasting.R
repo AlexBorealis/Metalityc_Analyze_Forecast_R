@@ -111,33 +111,6 @@ forecast_model <- function(team_name,
     mutate(ensemb = rowMeans(.[, 5:7])) |>
     mutate(delta_ensemb = round((real - ensemb)/real * 100, 2))
   
-  if (isTRUE(graphs)) {
-    
-    ggplot(data = train.data |> cbind(start_time = DT$real_stats[training.samples, start_time]), 
-           mapping = aes(x = start_time,
-                         y = inc_name)) +
-      geom_line() +
-      geom_line(aes(y = model_lm$fitted.values), colour = 'red') +
-      geom_line(aes(y = model_lm1$fitted.values), colour = 'green') +
-      geom_line(aes(y = model_rf$predicted), colour = 'orange') +
-      geom_line(aes(y = model_arima$fitted), colour = 'purple')
-    
-    ggplot(data = dt_result_train, mapping = aes(x = start_time,
-                                                 y = real)) +
-      geom_line() +
-      geom_line(aes(y = ensemb), colour = 'red')
-    
-    ggplot(data = dt_result_test, mapping = aes(x = start_time,
-                                                y = real)) +
-      geom_line() +
-      geom_line(aes(y = ensemb), colour = 'red')
-    
-  } else {
-    
-    NULL
-    
-  }
-  
   list('result_train' = dt_result_train,
        'result_test' = dt_result_test,
        'results_lm_with_intercept' = model_lm,

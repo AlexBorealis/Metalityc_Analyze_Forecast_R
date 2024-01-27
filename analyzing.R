@@ -6,7 +6,7 @@ heatmap_cor <- function(m,
   pheatmap(
     
     m,
-    breaks = seq(-1, 1, 0.02),
+    breaks = seq(-1, 1, .02),
     cluster_rows = F,
     cluster_cols = F,
     fontsize_number = size,
@@ -23,8 +23,8 @@ modify_pca <- function(team_name,
                        inc_name,
                        st_name,
                        side = 'home',
-                       cor_level = 0.2,
-                       p = 0.8,
+                       cor_level = .2,
+                       p = .8,
                        date = NULL) {
   
   DT <- tab_for_an(team_name = team_name, st_name = st_name, 
@@ -33,17 +33,17 @@ modify_pca <- function(team_name,
   
   if (is.null(inc_name)) {
     
-    training.samples <- createDataPartition(DT$repaired_data$pts, p = p, list = F)
+    training.samples <- createDataPartition(DT$approximated_data$pts, p = p, list = F)
     
   } else {
     
-    training.samples <- createDataPartition(DT$repaired_data[[inc_name]], p = p, list = F)
+    training.samples <- createDataPartition(DT$approximated_data[[inc_name]], p = p, list = F)
     
   }
   
-  train.data  <- DT$repaired_data[training.samples]
+  train.data  <- DT$approximated_data[training.samples]
   
-  test.data <- DT$repaired_data[-training.samples]
+  test.data <- DT$approximated_data[-training.samples]
   
   list('model_pcr' = pcr(DT$formula_without_intercept, data = train.data, scale = T),
        'test_data' = test.data)

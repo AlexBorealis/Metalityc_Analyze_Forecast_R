@@ -5,7 +5,10 @@ tab_for_an <- function(side = 'home',
                        ev_id = NULL,
                        date = NULL,
                        inc_name = NULL,
-                       cor_level = 0.3,
+                       win_pts = 3,
+                       na_ratio = .8,
+                       probs = .15,
+                       a = .05,
                        env = parent.frame()) {
   
   events_id <- need_ids(date = date) |>
@@ -34,8 +37,9 @@ tab_for_an <- function(side = 'home',
                gsub(pattern = '_\\(xG\\)', replacement = ''))
     
     main_dt <- events_id[home_participant_name_one %ilike% team_name] |>
-      mutate(h_result = ifelse(home_score_full > away_score_full, 'WIN', ifelse(home_score_full == away_score_full, 'DRAW', 'LOST'))) |>
-      mutate(pts = ifelse(h_result == 'WIN', 3, ifelse(h_result == 'DRAW', 1, 0))) |>
+      mutate(h_result = ifelse(home_score_full > away_score_full, 'WIN', 
+                               ifelse(home_score_full == away_score_full, 'DRAW', 'LOST'))) |>
+      mutate(pts = ifelse(h_result == 'WIN', win_pts, ifelse(h_result == 'DRAW', 1, 0))) |>
       inner_join(stats, by = 'event_id') |>
       pivot_wider(names_from = incident_name,
                   values_from = value_home,
@@ -53,8 +57,9 @@ tab_for_an <- function(side = 'home',
                gsub(pattern = '_\\(xG\\)', replacement = ''))
     
     main_dt <- events_id[away_participant_name_one %ilike% team_name] |>
-      mutate(h_result = ifelse(home_score_full < away_score_full, 'WIN', ifelse(home_score_full == away_score_full, 'DRAW', 'LOST'))) |>
-      mutate(pts = ifelse(h_result == 'WIN', 3, ifelse(h_result == 'DRAW', 1, 0))) |>
+      mutate(h_result = ifelse(home_score_full < away_score_full, 'WIN', 
+                               ifelse(home_score_full == away_score_full, 'DRAW', 'LOST'))) |>
+      mutate(pts = ifelse(h_result == 'WIN', win_pts, ifelse(h_result == 'DRAW', 1, 0))) |>
       inner_join(stats, by = 'event_id') |>
       pivot_wider(names_from = incident_name,
                   values_from = value_away,
@@ -65,28 +70,40 @@ tab_for_an <- function(side = 'home',
     
   }
   
-  if (!is_empty(main_dt$Red_Cards)) {
-    
-    main_dt_num <- main_dt |>
-      select(-c(group_label:home_participant_name_one,
-                current_result, away_participant_name_one,
-                h_result, stage_name, Red_Cards)) |>
-      mutate_if(is.character, as.numeric)
-    
-  } else {
-    
-    main_dt_num <- main_dt |>
-      select(-c(group_label:home_participant_name_one,
-                current_result, away_participant_name_one,
-                h_result, stage_name)) |>
-      mutate_if(is.character, as.numeric)
-    
-  }
+  main_dt_num <- main_dt |>
+    select(-c(group_label:home_participant_name_one,
+              current_result, away_participant_name_one,
+              h_result, stage_name)) |>
+    mutate_if(is.character, as.numeric) %>%
+    .[, map(.SD, zoo::na.approx, na.rm = F), .SDcols = colnames(.)]
   
-  main_dt_no_na <- main_dt_num[, map(.SD, zoo::na.approx, n = nrow(main_dt_num)), .SDcols = names(main_dt_num)]
+  interpolate_lst <- map(colnames(main_dt_num), \(i) {
+    
+    ts <- main_dt_num[[i]]
+    
+    length_ts <- length(ts[!is.na(ts)])
+    
+    n <- nrow(main_dt_num)
+    
+    if (length_ts > n * na_ratio) {
+      
+      ts
+      
+    } else {
+      
+      rpois(n = n, lambda = quantile(ts, probs = probs, na.rm = T))
+      
+    }
+    
+  })
   
-  cor <- round(cor(main_dt_no_na), 3) %>%
-    ifelse(. != 1 & (. > cor_level | . < -cor_level), ., NA)
+  names(interpolate_lst) <- colnames(main_dt_num)
+  
+  main_dt_no_na <- as.data.table(interpolate_lst) |> na.omit()
+  
+  rcor <- Hmisc::rcorr(as.matrix(main_dt_no_na))
+    
+  cor <- ifelse(rcor$P < a, round(rcor$r, 3), NA)
   
   if (!is.null(inc_name)) {
     
@@ -98,7 +115,7 @@ tab_for_an <- function(side = 'home',
          'dependent_variables' = dep_vars,
          'formula_with_intercept' = reformulate(dep_vars, response = inc_name, env = env),
          'formula_without_intercept' = reformulate(dep_vars, response = inc_name, env = env, intercept = F),
-         'repaired_data' =  main_dt_no_na,
+         'approximated_data' =  main_dt_no_na,
          'correlated_data' =  main_dt_no_na |> select(all_of(dep_vars)))
     
   } else {
@@ -111,62 +128,35 @@ tab_for_an <- function(side = 'home',
          'dependent_variables' = dep_vars,
          'formula_with_intercept' = reformulate(dep_vars, response = 'pts', env = env),
          'formula_without_intercept' = reformulate(dep_vars, response = 'pts', env = env, intercept = F),
-         'repaired_data' =  main_dt_no_na,
+         'approximated_data' =  main_dt_no_na,
          'correlated_data' =  main_dt_no_na |> select(all_of(dep_vars)))
     
   }
   
 }
 
-generate_stats <- function(tbl,
-                           p = 0,
-                           d = 0,
-                           q = 0,
-                           n = 17,
-                           acc = 0.5,
-                           inc_name) {
+test_data <- function(side = 'home',
+                      update_stats = F,
+                      team_name = NULL,
+                      st_name = NULL,
+                      ev_id = NULL,
+                      date = NULL,
+                      inc_name = NULL,
+                      win_pts = 3,
+                      cor_level = .3,
+                      na_ratio = .8,
+                      probs = .15,
+                      env = parent.frame()) {
   
-  repeat {
-    
-    model_arima <- arima(tbl$repaired_data[[inc_name]], order = c(p, d, q), include.mean = T)
-    
-    ar = model_arima$coef[grep(names(model_arima$coef), pattern = 'ar')]
-    
-    ma = model_arima$coef[grep(names(model_arima$coef), pattern = 'ma')]
-    
-    arima <- arima.sim(list(ar = ar, ma = ma),
-                       sd = sd(tbl$repaired_data[[inc_name]]), 
-                       mean = mean(tbl$repaired_data[[inc_name]]),
-                       n = n)
-    
-    if (n == nrow(tbl$repaired_data)) {
-      
-      DT_arima <- data.table(start_time = tbl$real_stats$start_time,
-                             real = tbl$repaired_data[[inc_name]],
-                             arima = arima) |>
-        mutate(delta2 = (real - arima)^2,
-               ratio = abs((real - arima)/real)) |>
-        mutate(arima = round(arima, 2))
-      
-    } else {
-      
-      DT_arima <- data.table(start_time = tbl$real_stats$start_time,
-                             real = tbl$repaired_data[[inc_name]],
-                             arima = arima[1:nrow(tbl$repaired_data)]) |>
-        mutate(delta2 = (real - arima)^2,
-               ratio = abs((real - arima)/real)) |>
-        mutate(arima = round(arima, 2))
-      
-      truncated <- arima[(nrow(tbl$repaired_data) + 1):n]
-      
-    }
-    
-    if (max(abs(DT_arima$ratio)) < acc) break
-    
-  }
+  DT <- tab_for_an(side = side,
+                   team_name = team_name,
+                   st_name = st_name,
+                   date = date,
+                   inc_name = inc_name,
+                   cor_level = cor_level, 
+                   update_stats = update_stats, 
+                   ev_id = ev_id)
   
-  return(list('model_arima' = model_arima,
-              'table_values' = DT_arima,
-              'truncated_ts' = truncated))
+  
   
 }
