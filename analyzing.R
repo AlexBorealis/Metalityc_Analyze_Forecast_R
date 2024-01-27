@@ -19,33 +19,47 @@ heatmap_cor <- function(m,
   
 }
 
-modify_pca <- function(team_name,
-                       inc_name,
-                       st_name,
-                       side = 'home',
-                       cor_level = .2,
-                       p = .8,
-                       date = NULL) {
+analyze_models <- function(models,
+                           control_method = 'LOOCV',
+                           ...) {
   
-  DT <- tab_for_an(team_name = team_name, st_name = st_name, 
-                   date = date, side = side, cor_level = cor_level,
-                   inc_name = ifelse(is.null(inc_name), 'pts', inc_name))
+  train_control <- trainControl(method = control_method)
   
-  if (is.null(inc_name)) {
-    
-    training.samples <- createDataPartition(DT$approximated_data$pts, p = p, list = F)
-    
-  } else {
-    
-    training.samples <- createDataPartition(DT$approximated_data[[inc_name]], p = p, list = F)
-    
-  }
+  rf_with_intercept <- train(models$formula_with_intercept, 
+                             data = models$train_data, 
+                             method = 'rf',
+                             trControl = train_control)
   
-  train.data  <- DT$approximated_data[training.samples]
+  rf_without_intercept <- train(models$formula_without_intercept, 
+                                data = models$train_data, 
+                                method = 'rf',
+                                trControl = train_control)
   
-  test.data <- DT$approximated_data[-training.samples]
+  glm_with_intercept <- train(models$formula_with_intercept, 
+                              data = models$train_data, 
+                              method = 'glm',
+                              trControl = train_control)
   
-  list('model_pcr' = pcr(DT$formula_without_intercept, data = train.data, scale = T),
-       'test_data' = test.data)
+  glm_without_intercept <- train(models$formula_without_intercept, 
+                                 data = models$train_data, 
+                                 method = 'glm',
+                                 trControl = train_control)
+  
+  pcr_with_intercept <- train(models$formula_with_intercept, 
+                              data = models$train_data, 
+                              method = 'pcr',
+                              trControl = train_control)
+  
+  pcr_without_intercept <- train(models$formula_without_intercept, 
+                                 data = models$train_data, 
+                                 method = 'pcr',
+                                 trControl = train_control)
+  
+  list('rf_with_intercept' = rf_with_intercept,
+       'rf_without_intercept' = rf_without_intercept,
+       'glm_with_intercept' = glm_with_intercept,
+       'glm_without_intercept' = glm_without_intercept,
+       'pcr_with_intercept' = pcr_with_intercept,
+       'pcr_without_intercept' = pcr_without_intercept)
   
 }

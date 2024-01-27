@@ -6,11 +6,10 @@ tab_for_an <- function(side = 'home',
                        date = NULL,
                        inc_name = NULL,
                        win_pts = 3,
-                       na_ratio = .8,
-                       probs = .15,
                        a = .05,
                        env = parent.frame()) {
   
+  # Getting table of event_id for a sending requests for a getting statistics
   events_id <- need_ids(date = date) |>
     group_by(event_id) |>
     filter(row_number() == 1) |>
@@ -18,6 +17,8 @@ tab_for_an <- function(side = 'home',
     #filter(row_number() %in% 1:10) |>
     as.data.table()
   
+  # In this stage need to use this variant - working with story statistics
+  # In the production stage need to use variant 'update_stats = T'
   if (isTRUE(update_stats)) {
     
     fun_event_statistics_g(ev_id = events_id$event_id)
@@ -28,6 +29,10 @@ tab_for_an <- function(side = 'home',
     
   }
   
+  # First stage of preparing table for analyze:
+  #1) choose one side parameter
+  #2) repair some names in incidents
+  #3) pivot table (wide format)
   if (side == 'home') {
     
     stats <- need_stats(ev_id = ev_id,
@@ -70,6 +75,10 @@ tab_for_an <- function(side = 'home',
     
   }
   
+  # Second stage of preparing table for analyze:
+  #1) remove character rows
+  #2) remove NA values
+  #3) interpolate/change time series of statistics parameters
   main_dt_num <- main_dt |>
     select(-c(group_label:home_participant_name_one,
               current_result, away_participant_name_one,
@@ -77,37 +86,37 @@ tab_for_an <- function(side = 'home',
     mutate_if(is.character, as.numeric) %>%
     .[, map(.SD, zoo::na.approx, na.rm = F), .SDcols = colnames(.)]
   
-  interpolate_lst <- map(colnames(main_dt_num), \(i) {
+  lst <- map(colnames(main_dt_num), \(i) {
     
-    ts <- main_dt_num[[i]]
-    
-    length_ts <- length(ts[!is.na(ts)])
-    
-    n <- nrow(main_dt_num)
-    
-    if (length_ts > n * na_ratio) {
+    if (length(main_dt_num[[i]][!is.na(main_dt_num[[i]])]) < nrow(main_dt_num)) {
       
-      ts
+      main_dt_num[[i]] <- NULL
       
     } else {
       
-      rpois(n = n, lambda = quantile(ts, probs = probs, na.rm = T))
+      main_dt_num[[i]]
       
     }
     
   })
   
-  names(interpolate_lst) <- colnames(main_dt_num)
+  names(lst) <- colnames(main_dt_num)
   
-  main_dt_no_na <- as.data.table(interpolate_lst) |> na.omit()
+  main_dt_no_na <- as.data.table(lst) |> na.omit()
   
+  # Creation correlation matrix of statistic parameters
   rcor <- Hmisc::rcorr(as.matrix(main_dt_no_na))
     
   cor <- ifelse(rcor$P < a, round(rcor$r, 3), NA)
   
+  # Last stage of preparing table for analyze:
+  #1) determine dependent statistic parameters
+  #2) creation list of results
   if (!is.null(inc_name)) {
     
     dep_vars <- cor[, inc_name] %>% .[!is.na(.)] %>% names()
+    
+    cor_data_vars <- c(inc_name, dep_vars)
     
     list('real_stats' = main_dt,
          'correlation_matrix' = cor,
@@ -116,11 +125,13 @@ tab_for_an <- function(side = 'home',
          'formula_with_intercept' = reformulate(dep_vars, response = inc_name, env = env),
          'formula_without_intercept' = reformulate(dep_vars, response = inc_name, env = env, intercept = F),
          'approximated_data' =  main_dt_no_na,
-         'correlated_data' =  main_dt_no_na |> select(all_of(dep_vars)))
+         'correlated_data' =  main_dt_no_na |> select(all_of(cor_data_vars)))
     
   } else {
     
     dep_vars <- cor[, "pts"] %>% .[!is.na(.)] %>% names()
+    
+    cor_data_vars <- c('pts', dep_vars)
     
     list('real_stats' = main_dt,
          'correlation_matrix' = cor,
@@ -129,33 +140,13 @@ tab_for_an <- function(side = 'home',
          'formula_with_intercept' = reformulate(dep_vars, response = 'pts', env = env),
          'formula_without_intercept' = reformulate(dep_vars, response = 'pts', env = env, intercept = F),
          'approximated_data' =  main_dt_no_na,
-         'correlated_data' =  main_dt_no_na |> select(all_of(dep_vars)))
+         'correlated_data' =  main_dt_no_na |> select(all_of(cor_data_vars)))
     
   }
   
 }
 
-test_data <- function(side = 'home',
-                      update_stats = F,
-                      team_name = NULL,
-                      st_name = NULL,
-                      ev_id = NULL,
-                      date = NULL,
-                      inc_name = NULL,
-                      win_pts = 3,
-                      cor_level = .3,
-                      na_ratio = .8,
-                      probs = .15,
-                      env = parent.frame()) {
-  
-  DT <- tab_for_an(side = side,
-                   team_name = team_name,
-                   st_name = st_name,
-                   date = date,
-                   inc_name = inc_name,
-                   cor_level = cor_level, 
-                   update_stats = update_stats, 
-                   ev_id = ev_id)
+test_data <- function() {
   
   
   

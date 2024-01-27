@@ -1,5 +1,4 @@
-# Testing methods ----
-
+# Parameters ----
 # Team names
 team_name <- c('Bournemouth', 'Liverpool')
 
@@ -9,29 +8,29 @@ inc_names <- c('Attacks', 'Ball_Possession', 'Blocked_Shots', 'Completed_Passes'
                'Shots_off_Goal', 'Shots_on_Goal', 'Tackles', 'Throw_ins', 'Total_Passes', 'Yellow_Cards', 
                'home_score_full', 'away_score_full', 'pts')
 
-inc_name <- 'Attacks'
+inc_name <- 'Ball_Possession'
 
-p = .7
+p = .8
 
 #new_form = F
 
-DT <- tab_for_an(team_name = team_name[1], st_name = 'match',
-                 date = Sys.Date() - 700, side = 'home', cor_level = .3,
+DT <- tab_for_an(team_name = team_name[2], st_name = 'match', 
+                 date = Sys.Date() - 700, side = 'away', a = .05,
                  inc_name = ifelse(is.null(inc_name), 'pts', inc_name))
 
 if (is.null(inc_name)) {
   
-  training.samples <- createDataPartition(DT$approximated_data$pts, p = p, list = FALSE)
+  training.samples <- createDataPartition(DT$correlated_data$pts, p = p, list = FALSE)
   
 } else {
   
-  training.samples <- createDataPartition(DT$approximated_data[[inc_name]], p = p, list = FALSE)
+  training.samples <- createDataPartition(DT$correlated_data[[inc_name]], p = p, list = FALSE)
   
 }
 
-train.data  <- DT$approximated_data[training.samples]
+train.data  <- DT$correlated_data[training.samples]
 
-test.data <- DT$approximated_data[-training.samples]
+test.data <- DT$correlated_data[-training.samples]
 
 new_test.data <- data.table('quantiles' = c('0%', '25%', '50%', '75%', '100%'),
                             t(map_df(colnames(train.data), \(i) {
@@ -41,6 +40,15 @@ new_test.data <- data.table('quantiles' = c('0%', '25%', '50%', '75%', '100%'),
                             })))
 
 colnames(new_test.data) <- c('quantiles', colnames(test.data))
+
+# Testing methods ----
+
+cr_dt <- create_models(team_name = team_name[2], st_name = 'match',
+                       date = Sys.Date() - 700, side = 'away', a = .05,
+                       inc_name = ifelse(is.null(inc_name), 'pts', inc_name),
+                       ntree = 1000, family = gaussian())
+
+an_dt <- analyze_models(models = cr_dt)
 
 #PCR ----
 model_pcr <- pcr(DT$formula_without_intercept, data = train.data, scale = T)
@@ -63,7 +71,8 @@ results <- data.table(new_test.data[, .(quantiles)],
                       delta2_rf = (new_test.data[, ..inc_name] - predict(model_rf, new_test.data))^2,
                       predict_glm = predict(model_glm, new_test.data),
                       delta2_glm = (new_test.data[, ..inc_name] - predict(model_glm, new_test.data))^2,
-                      predict_pcr = predict(model_pcr, new_test.data, ncomp = which(as.numeric(R2_pcr$val) >= .6)[1])[, 1, 1],
+                      predict_pcr = predict(model_pcr, new_test.data, 
+                                            ncomp = which(as.numeric(R2_pcr$val) >= max(as.numeric(R2_pcr$val) ) * 3/4 )[1])[, 1, 1],
                       delta2_pcr = (new_test.data[, ..inc_name] - predict(model_pcr, new_test.data))^2)
 
 colnames(results) <- c('quantiles', inc_name,
@@ -86,7 +95,9 @@ learn_result <- results[, c(1, 2, 3, 5, 7)] |>
 
 learn_result
 
-train.data[, .N, keyby = .(Attacks)] |>
+r2_train <- sum((learn_result$away_score_full - learn_result$predict_ensemb)^2)
+
+train.data[, .N, keyby = .(away_score_full)] |>
   mutate(p = round( cumsum(N/sum(N)), 2) ) |>
   mutate(U = round(1/p, 2),
          q = round(1 - p, 2),
@@ -94,21 +105,26 @@ train.data[, .N, keyby = .(Attacks)] |>
 
 bayes_correct <- function() {
   
-  DT <- data.table(new_test.data[, .(quantiles)],
-                   new_test.data[, ..inc_name],
-                   predict_rf = predict(model_rf, new_test.data),
-                   delta2_rf = (new_test.data[, ..inc_name] - predict(model_rf, new_test.data))^2,
-                   predict_glm = predict(model_glm, new_test.data),
-                   delta2_glm = (new_test.data[, ..inc_name] - predict(model_glm, new_test.data))^2,
-                   predict_pcr = predict(model_pcr, new_test.data, ncomp = which(as.numeric(R2_pcr$val) >= .6)[1])[, 1, 1],
-                   delta2_pcr = (new_test.data[, ..inc_name] - predict(model_pcr, new_test.data))^2)
+  results <- data.table(new_test.data[, .(quantiles)],
+                        new_test.data[, ..inc_name],
+                        predict_rf = predict(model_rf, new_test.data),
+                        delta2_rf = (new_test.data[, ..inc_name] - predict(model_rf, new_test.data))^2,
+                        predict_glm = predict(model_glm, new_test.data),
+                        delta2_glm = (new_test.data[, ..inc_name] - predict(model_glm, new_test.data))^2,
+                        predict_pcr = predict(model_pcr, new_test.data, 
+                                              ncomp = which(as.numeric(R2_pcr$val) >= max(as.numeric(R2_pcr$val) ) * 3/4 )[1])[, 1, 1],
+                        delta2_pcr = (new_test.data[, ..inc_name] - predict(model_pcr, new_test.data))^2)
   
-  colnames(DT) <- c('quantiles', inc_name,
-                    'predict_rf', 'delta2_rf',
-                    'predict_glm', 'delta2_glm',
-                    'predict_pcr', 'delta2_pcr')
+  colnames(results) <- c('quantiles', inc_name,
+                         'predict_rf', 'delta2_rf',
+                         'predict_glm', 'delta2_glm',
+                         'predict_pcr', 'delta2_pcr')
   
-  ratio <- (DT$Attacks - DT$predict_ensemb)/DT$Attacks
+  learn_result <- results[, c(1, 2, 3, 5, 7)] |>
+    mutate_if(is.numeric, ~ round(., 2)) %>%
+    mutate(predict_ensemb = round(rowMeans(.[, 3:5], na.rm = T), 2))
+  
+  ratio <- 
   
   if (abs(ratio) > .2) {
     
@@ -127,6 +143,29 @@ bayes_correct <- function() {
   return(pAB)
   
 }
+
+# Just train & test ----
+model_pcr <- pcr(DT$formula_without_intercept, data = train.data, scale = T)
+
+summary(model_pcr)
+
+model_glm <- glm(DT$formula_without_intercept, data = train.data, family = gaussian())
+
+model_rf <- randomForest(DT$formula_without_intercept, data = train.data, ntrees = 1000)
+
+y_test = test.data[[inc_name]]
+y_rf_test <- predict(model_rf, test.data)
+y_pcr_test <- predict(model_pcr, test.data)[, 1, 2]
+y_glm_test <- predict(model_glm, test.data)
+
+r2_rf_test = sum((y_test - y_rf_test)^2)
+r2_pcr_test = sum((y_test - y_pcr_test)^2)
+r2_glm_test = sum((y_test - y_glm_test)^2)
+
+r2_rf_test
+r2_pcr_test
+r2_glm_test
+
 
 if (isTRUE(graphs)) {
   
