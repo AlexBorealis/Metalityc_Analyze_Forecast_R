@@ -10,12 +10,12 @@ inc_names <- c('Attacks', 'Ball_Possession', 'Blocked_Shots', 'Completed_Passes'
 
 inc_name <- 'Ball_Possession'
 
-p = .8
+p = .7
 
 #new_form = F
 
-DT <- tab_for_an(team_name = team_name[2], st_name = 'match', 
-                 date = Sys.Date() - 700, side = 'away', a = .05,
+DT <- tab_for_an(team_name = team_name[1], st_name = NULL, 
+                 date = Sys.Date() - 700, side = 'home', a = .01, b = .001,
                  inc_name = ifelse(is.null(inc_name), 'pts', inc_name))
 
 if (is.null(inc_name)) {
@@ -43,12 +43,47 @@ colnames(new_test.data) <- c('quantiles', colnames(test.data))
 
 # Testing methods ----
 
-cr_dt <- create_models(team_name = team_name[2], st_name = 'match',
-                       date = Sys.Date() - 700, side = 'away', a = .05,
+rf_dt <- create_models(team_name = team_name[1], st_name = NULL, method = 'rf',
+                       date = Sys.Date() - 700, side = 'home', p = p, a = .05, b = .01,
                        inc_name = ifelse(is.null(inc_name), 'pts', inc_name),
-                       ntree = 1000, family = gaussian())
+                       ntree = 300, proximity = T, importance = T)
 
-an_dt <- analyze_models(models = cr_dt)
+pcr_dt <- create_models(team_name = team_name[1], st_name = NULL, method = 'pcr',
+                        date = Sys.Date() - 700, side = 'home', p = p, a = .05, b = .01,
+                        inc_name = ifelse(is.null(inc_name), 'pts', inc_name))
+
+glm_dt <- create_models(team_name = team_name[1], st_name = NULL, method = 'glm',
+                        date = Sys.Date() - 700, side = 'home', p = p, a = .05, b = .01,
+                        inc_name = ifelse(is.null(inc_name), 'pts', inc_name),
+                        family = gaussian())
+
+
+rf_dt <- create_models(team_name = team_name[2], st_name = NULL, method = 'rf',
+                       date = Sys.Date() - 700, side = 'away', p = p, a = .01, b = .001,
+                       inc_name = ifelse(is.null(inc_name), 'pts', inc_name),
+                       ntree = 300, proximity = T, importance = T)
+
+pcr_dt <- create_models(team_name = team_name[2], st_name = NULL, method = 'pcr',
+                        date = Sys.Date() - 700, side = 'away', p = p, a = .01, b = .001,
+                        inc_name = ifelse(is.null(inc_name), 'pts', inc_name))
+
+glm_dt <- create_models(team_name = team_name[2], st_name = NULL, method = 'glm',
+                        date = Sys.Date() - 700, side = 'away', p = p, a = .01, b = .001,
+                        inc_name = ifelse(is.null(inc_name), 'pts', inc_name),
+                        family = gaussian())
+
+an_rf_dt <- analyze_models(models = rf_dt, inc_name = inc_name, method = 'rf')
+
+an_glm_dt <- analyze_models(models = glm_dt, inc_name = inc_name, method = 'glm')
+
+an_pcr_dt <- analyze_models(models = pcr_dt, inc_name = inc_name, method = 'pcr')
+
+train_control <- trainControl(method = 'LOOCV')
+
+model_with_intercept <- train(glm_dt$formula_with_intercept, 
+                              data = glm_dt$train_data, 
+                              method = 'glm',
+                              trControl = train_control)
 
 #PCR ----
 model_pcr <- pcr(DT$formula_without_intercept, data = train.data, scale = T)
@@ -63,7 +98,7 @@ sum_glm <- summary(model_glm)
 
 sum_glm
 
-model_rf <- randomForest(DT$formula_without_intercept, data = train.data, ntrees = 1000)
+model_rf <- randomForest(DT$formula_with_intercept, data = train.data)
 
 results <- data.table(new_test.data[, .(quantiles)],
                       new_test.data[, ..inc_name],
@@ -167,11 +202,17 @@ r2_pcr_test
 r2_glm_test
 
 
+ggplot(data = cr_dt$main_table, 
+       mapping = aes(x = 1:nrow(cr_dt$main_table),
+                     y = cr_dt$main_table[[inc_name]])) +
+  geom_line() +
+  stat_smooth()
+
 if (isTRUE(graphs)) {
   
-  ggplot(data = train.data |> cbind(start_time = DT$real_stats[training.samples, start_time]), 
-         mapping = aes(x = start_time,
-                       y = inc_name)) +
+  ggplot(data = cr_dt$main_table, 
+         mapping = aes(x = 1:nrow(cr_dt$main_table),
+                       y = cr_dt$main_table[[inc_name]])) +
     geom_line() +
     geom_line(aes(y = model_lm$fitted.values), colour = 'red') +
     geom_line(aes(y = model_lm1$fitted.values), colour = 'green') +
@@ -328,11 +369,9 @@ predict(model_rf, data.table(Tackles = 32))
 
 # ARIMA ----
 
-model_arima <- auto.arima(DT$approximated_data[[inc_name]], stationary = T, seasonal = F)
+model_arima <- auto.arima(cr_dt$main_table[[inc_name]], stationary = T, seasonal = F)
 
-model_poisson <- poisson(link = 'log')
-
-acf <- mcmc(data = DT$approximated_data[[inc_name]]) |> autocorr(lags = c(1:10))
+acf <- mcmc(data = cr_dt$main_table[[inc_name]]) |> autocorr(lags = c(1:10))
 
 lst_arima_gen <- map(names(DT$approximated_data), \(i) {
   
