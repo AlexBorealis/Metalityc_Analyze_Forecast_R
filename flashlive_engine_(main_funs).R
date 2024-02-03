@@ -423,7 +423,10 @@ fun_team_squad <- function(loc = locale$locale[1],
   
 }
 
-need_ids <- function(date = NULL) {
+need_ids <- function(date = NULL,
+                     sport = 1) {
+  
+  sport_name <- tolower(sport_list$name)
   
   con <- dbConnect(drv = RPostgreSQL::PostgreSQL(),
                    user = "postgres", 
@@ -438,16 +441,16 @@ need_ids <- function(date = NULL) {
     data.table(
       
       dbGetQuery(con, str_glue('select *
-                              from (
-                            	
-                              	select group_label, event_name,
-                              		unnest(tab_name) "tab_name", unnest(start_time) "start_time", unnest(event_id) "event_id", 
-                              		unnest(home_participant_name_one) "home_participant_name_one", unnest(home_score_full) "home_score_full",
-                              		unnest(current_result) "current_result",
-                              		unnest(away_score_full) "away_score_full", unnest(away_participant_name_one) "away_participant_name_one",
-                              		unnest(h_result) "h_result" 
-                              	from sport_data.soccer_hth_g) tab
-                              where event_name = \'Premier League\' and start_time::date > \'{date}\''))
+                                from (
+                              	
+                                	select group_label, event_name,
+                                		unnest(tab_name) "tab_name", unnest(start_time) "start_time", unnest(event_id) "event_id", 
+                                		unnest(home_participant_name_one) "home_participant_name_one", unnest(home_score_full) "home_score_full",
+                                		unnest(current_result) "current_result",
+                                		unnest(away_score_full) "away_score_full", unnest(away_participant_name_one) "away_participant_name_one",
+                                		unnest(h_result) "h_result" 
+                                	from sport_data.{sport_name[sport]}_hth_g) tab
+                                where start_time::date > \'{date}\''))
       
     )
     
@@ -455,17 +458,13 @@ need_ids <- function(date = NULL) {
     
     data.table(
       
-      dbGetQuery(con, str_glue('select *
-                              from (
-                            	
-                              	select group_label, event_name,
+      dbGetQuery(con, str_glue('select group_label, event_name,
                               		unnest(tab_name) "tab_name", unnest(start_time) "start_time", unnest(event_id) "event_id", 
                               		unnest(home_participant_name_one) "home_participant_name_one", unnest(home_score_full) "home_score_full",
                               		unnest(current_result) "current_result",
                               		unnest(away_score_full) "away_score_full", unnest(away_participant_name_one) "away_participant_name_one",
                               		unnest(h_result) "h_result" 
-                              	from sport_data.soccer_hth_g) tab
-                              where event_name = \'Premier League\''))
+                              	from sport_data.{sport_name[sport]}_hth_g'))
       
     )
     
@@ -474,7 +473,10 @@ need_ids <- function(date = NULL) {
 }
 
 need_stats <- function(ev_id = NULL,
+                       sport = 1,
                        st_name = NULL) {
+  
+  sport_name <- tolower(sport_list$name)
   
   con <- dbConnect(drv = RPostgreSQL::PostgreSQL(),
                    user = "postgres", 
@@ -490,11 +492,11 @@ need_stats <- function(ev_id = NULL,
       
       data.table(
         
-        dbGetQuery(con, 'select event_id, incident_name,
-                            unnest(stage_name) "stage_name",
-                            unnest(value_home) "value_home",
-                            unnest(value_away) "value_away"
-                         from sport_data.soccer_statistics_g;')
+        dbGetQuery(con, str_glue('select event_id, incident_name,
+                                    unnest(stage_name) "stage_name",
+                                    unnest(value_home) "value_home",
+                                    unnest(value_away) "value_away"
+                                  from sport_data.{sport_name[sport]}_statistics_g;'))
         
       )
       
@@ -506,7 +508,7 @@ need_stats <- function(ev_id = NULL,
                                     unnest(stage_name) "stage_name",
                                     unnest(value_home) "value_home",
                                     unnest(value_away) "value_away"
-                                  from sport_data.soccer_statistics_g
+                                  from sport_data.{sport_name[sport]}_statistics_g
                                   where event_id = \'{ev_id}\';'))
         
       )
@@ -525,7 +527,7 @@ need_stats <- function(ev_id = NULL,
                                       unnest(stage_name) "stage_name",
                                       unnest(value_home) "value_home",
                                       unnest(value_away) "value_away"
-                                    from sport_data.soccer_statistics_g) tab
+                                    from sport_data.{sport_name[sport]}_statistics_g) tab
                                   where stage_name ilike \'{st_name}\';'))
         
       )
@@ -540,7 +542,7 @@ need_stats <- function(ev_id = NULL,
                                       unnest(stage_name) "stage_name",
                                       unnest(value_home) "value_home",
                                       unnest(value_away) "value_away"
-                                    from sport_data.soccer_statistics_g) tab
+                                    from sport_data.{sport_name[sport]}_statistics_g) tab
                                   where event_id = \'{ev_id}\' and stage_name ilike \'{st_name}\';'))
         
       )

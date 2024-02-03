@@ -19,33 +19,8 @@ heatmap_cor <- function(m,
   
 }
 
-analyze_models <- function(models,
-                           method,
-                           control_method = 'LOOCV',
-                           inc_name = NULL,
-                           ...) {
+analyze_models <- function(...) {
   
-  if (!is.null(models$formula_with_intercept)) {
-    
-    train_control <- trainControl(method = control_method)
-    
-    model_with_intercept <- train(form = models$formula_with_intercept, 
-                                  data = models$train_data, 
-                                  method = method,
-                                  trControl = train_control)
-    
-    model_with_intercept <- train(form = models$formula_without_intercept, 
-                                  data = models$train_data, 
-                                  method = method,
-                                  trControl = train_control)
-    
-    list('model_with_intercept' = model_with_intercept,
-         'model_without_intercept' = model_without_intercept)
-    
-  } else {
-    
-    models
-    
-  }
+  
   
 }

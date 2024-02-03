@@ -10,7 +10,7 @@ conflicts_prefer(dplyr::select(),
                  dplyr::lag(),
                  dplyr::lead(),
                  data.table::`:=`,
-                 pls::R2(),
+                 caret::R2(),
                  EnvStats::predict())
 library(data.table, warn.conflicts = F)
 setDTthreads(0)
@@ -55,3 +55,5 @@ library(FinTS, warn.conflicts = F)
 library(rugarch)
 library(urca)
 library(EnvStats, warn.conflicts = F)
+library(lmtest)
+library(tseries)

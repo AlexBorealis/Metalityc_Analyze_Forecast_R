@@ -1,36 +1,118 @@
-# Parameters ----
-# Team names
-team_name <- c('Bournemouth', 'Liverpool')
+# Testing methods ----
 
-inc_names <- c('Attacks', 'Ball_Possession', 'Blocked_Shots', 'Completed_Passes', 'Corner_Kicks',
-               'Clearances_Completed', 'Dangerous_Attacks', 'Expected_Goals', 'Red_Cards',
-               'Fouls', 'Free_Kicks', 'Goal_Attempts', 'Goalkeeper_Saves', 'Offsides',
-               'Shots_off_Goal', 'Shots_on_Goal', 'Tackles', 'Throw_ins', 'Total_Passes', 'Yellow_Cards', 
-               'home_score_full', 'away_score_full', 'pts')
+team_name <- c('Phoenix Suns', 'Dallas Mavericks')
 
-inc_name <- 'Ball_Possession'
+inc_names <- c('two_point_field_goals_made', 'three_point_field_goals_made', 'free_throws_made',
+               'assists', 'blocks', 'defensive_rebounds', 'offensive_rebounds', 
+               'personal_fouls', 'technical_fouls', 
+               'turnovers', 'steals')
 
-p = .7
+inc_name <- inc_names[3]
 
-#new_form = F
+DT <- tab_for_an(team_name = team_name[1], st_name = 'match',
+                 side = 'home', sport = 3, part = 4)
 
-DT <- tab_for_an(team_name = team_name[1], st_name = NULL, 
-                 date = Sys.Date() - 700, side = 'home', a = .01, b = .001,
-                 inc_name = ifelse(is.null(inc_name), 'pts', inc_name))
+
+# Fitted arima model ----
+f <- create_models_basketball(team_name = team_name[1], side = 'home', a = .01,
+                              st_name = 'match', lambda = 'auto', h = 5)
+
+ind = 4
+
+f$forecast_table[seq(3, nrow(f$forecast_table), 3)][ind]
+
+f$forecast_table[seq(2, nrow(f$forecast_table) - 1, 3)][ind]
+
+f$forecast_table[seq(1, nrow(f$forecast_table) - 2, 3)][ind]
+
+ts <- DT$approximated_data$two_point_field_goals_made
+
+plot(ts, type = 'b', col = 'green')
+lines(f$forecast_data$two_point_field_goals_made$model_arima$fitted, col = 'blue')
+
+f1 <- forecast(f$forecast_data$two_point_field_goals_made$model_arima, h = 5, level = 80)
+
+autoplot(f1)
+
+## Modeling time series ----
+
+
+###################################
+
 
 if (is.null(inc_name)) {
   
-  training.samples <- createDataPartition(DT$correlated_data$pts, p = p, list = FALSE)
+  training.samples <- createDataPartition(DT$approximated_data$pts, p = p, list = FALSE)
   
 } else {
   
-  training.samples <- createDataPartition(DT$correlated_data[[inc_name]], p = p, list = FALSE)
+  training.samples <- createDataPartition(DT$approximated_data[[inc_name]], p = p, list = FALSE)
   
 }
 
-train.data  <- DT$correlated_data[training.samples]
+scaled_data <- scale(DT$approximated_data |> mutate(home_score_full = two_point_field_goals_made * 2 +
+                                                      three_point_field_goals_made * 3 + free_throws_made * 1))
 
-test.data <- DT$correlated_data[-training.samples]
+train.data  <- as.data.table(scaled_data)[training.samples]
+
+test.data <- as.data.table(scaled_data)[-training.samples]
+
+home_dep_vars <- c('two_point_field_goals_made', 'three_point_field_goals_made',
+                   'assists', 'blocks', 'defensive_rebounds', 'offensive_rebounds', 'free_throws_made', 
+                   'personal_fouls', 'techical_fouls', 'turnovers')
+
+away_dep_vars <- c('two_point_field_goals_made', 'three_point_field_goals_made',
+                   'assists', 'blocks', 'defensive_rebounds', 'offensive_rebounds', 'free_throws_made', 
+                   'personal_fouls', 'technical_fouls', 'turnovers')
+
+train_control <- trainControl(method = 'cv', number = 10)
+
+model_rf_train <- train(reformulate(away_dep_vars[c(1:2, 7)], response = inc_name, intercept = F),
+                        data = as.data.table(scaled_data),
+                        trControl = train_control,
+                        method = 'rf')
+
+model_rf_train
+
+rf_dt <- randomForest(reformulate(away_dep_vars[c(1:2, 7)], response = inc_name, intercept = F),
+                      data = train.data,
+                      ntree = 1000,
+                      mtry = 3)
+
+predicted_rf <- predict(rf_dt, test.data)
+
+data.table(RMSE = RMSE(predicted_rf, test.data[[inc_name]]),
+           Rsquared = caret::R2(predicted_rf, test.data[[inc_name]]),
+           MAE = MAE(predicted_rf, test.data[[inc_name]]))
+
+train_control <- trainControl(method = 'cv', number = 10)
+
+model_lm_train <- train(reformulate(away_dep_vars[c(1:2, 7)], response = inc_name, intercept = F),
+                        data = as.data.table(scaled_data),
+                        trControl = train_control,
+                        method = 'lm')
+
+model_lm_train
+
+lm_dt <- lm(reformulate(away_dep_vars[c(1:2, 7)], response = inc_name, intercept = F),
+            data = train.data)
+
+predicted_lm <- predict(lm_dt, test.data)
+
+data.table(RMSE = RMSE(predicted_lm, test.data[[inc_name]]),
+           Rsquared = caret::R2(predicted_lm, test.data[[inc_name]]),
+           MAE = MAE(predicted_lm, test.data[[inc_name]]))
+
+bptest(lm_dt)
+
+train_control <- trainControl(method = 'cv', number = 10)
+
+model_wlm_train <- train(reformulate(away_dep_vars[1:7], response = inc_name, intercept = F),
+                         data = as.data.table(scaled_data),
+                         trControl = train_control,
+                         method = 'rlm')
+
+model_wlm_train
 
 new_test.data <- data.table('quantiles' = c('0%', '25%', '50%', '75%', '100%'),
                             t(map_df(colnames(train.data), \(i) {
@@ -41,42 +123,80 @@ new_test.data <- data.table('quantiles' = c('0%', '25%', '50%', '75%', '100%'),
 
 colnames(new_test.data) <- c('quantiles', colnames(test.data))
 
-# Testing methods ----
+data <- train.data
 
-rf_dt <- create_models(team_name = team_name[1], st_name = NULL, method = 'rf',
-                       date = Sys.Date() - 700, side = 'home', p = p, a = .05, b = .01,
+model_lm <- lm(DT$formula_without_intercept, data = data)
+
+pairs(data, pch = 18, col = 'steelblue')
+
+hist(residuals(model_lm), col = "steelblue")
+
+plot(fitted(model_lm), residuals(model_lm))
+
+abline(h = 0, lty = 2) 
+
+summary(model_lm)
+
+train_control <- trainControl(method = 'LOOCV', number = 10)
+
+model_lm_train <- train(DT$formula_with_intercept,
+                        data = DT$approximated_data,
+                        trControl = train_control,
+                        method = 'rf')
+
+model_lm_train
+
+rf_dt <- create_models(team_name = team_name[1], st_name = '4th Quarter', sport = 3, part = 4,
+                       date = Sys.Date() - 700, side = 'home', a = .1, b = .1, method = 'rf',
+                       inc_name = ifelse(is.null(inc_name), 'pts', inc_name),
+                       ntree = 250, proximity = T, importance = T)
+
+pcr_dt <- create_models(team_name = team_name[1], st_name = '4th Quarter', sport = 3, part = 4,
+                        date = Sys.Date() - 700, side = 'home', a = .1, b = .1, method = 'pcr',
+                        inc_name = ifelse(is.null(inc_name), 'pts', inc_name))
+
+glm_dt <- create_models(team_name = team_name[1], st_name = '4th Quarter', sport = 3, part = 4,
+                        date = Sys.Date() - 700, side = 'home', a = .1, b = .1, method = 'glm',
+                        inc_name = ifelse(is.null(inc_name), 'pts', inc_name))
+
+lm_dt <- create_models(team_name = team_name[1], st_name = '4th Quarter', sport = 3, part = 4,
+                       date = Sys.Date() - 700, side = 'home', a = .1, b = .1, method = 'lm',
+                       inc_name = ifelse(is.null(inc_name), 'pts', inc_name))
+
+model_lm <- lm(rf_dt$formula_with_intercept, data = rf_dt$table_resp_depvars)
+
+knots <- quantile(rf_dt$table_resp_depvars$home_score_full, p = c(0.25, 0.5, 0.75))
+
+model_bs <- lm(home_score_full ~ bs())
+
+  
+# Build the model
+model3 <- lm(medv ~ bs(lstat, knots = knots), data = train.data)
+
+
+rf_dt <- create_models(team_name = team_name[2], st_name = NULL, method = 'rf', sport = 3, part = 4,
+                       date = Sys.Date() - 700, side = 'away', p = p, a = .1, b = .1,
                        inc_name = ifelse(is.null(inc_name), 'pts', inc_name),
                        ntree = 300, proximity = T, importance = T)
 
-pcr_dt <- create_models(team_name = team_name[1], st_name = NULL, method = 'pcr',
-                        date = Sys.Date() - 700, side = 'home', p = p, a = .05, b = .01,
+pcr_dt <- create_models(team_name = team_name[2], st_name = NULL, method = 'pcr', sport = 3, part = 4,
+                        date = Sys.Date() - 700, side = 'away', p = p, a = .1, b = .1,
                         inc_name = ifelse(is.null(inc_name), 'pts', inc_name))
 
-glm_dt <- create_models(team_name = team_name[1], st_name = NULL, method = 'glm',
-                        date = Sys.Date() - 700, side = 'home', p = p, a = .05, b = .01,
+glm_dt <- create_models(team_name = team_name[2], st_name = NULL, method = 'glm', sport = 3, part = 4,
+                        date = Sys.Date() - 700, side = 'away', p = p, a = .01, b = .1,
                         inc_name = ifelse(is.null(inc_name), 'pts', inc_name),
                         family = gaussian())
 
+an_rf_dt <- analyze_models(models = rf_dt$model_without_intercept, inc_name = inc_name, method = 'rf')
 
-rf_dt <- create_models(team_name = team_name[2], st_name = NULL, method = 'rf',
-                       date = Sys.Date() - 700, side = 'away', p = p, a = .01, b = .001,
-                       inc_name = ifelse(is.null(inc_name), 'pts', inc_name),
-                       ntree = 300, proximity = T, importance = T)
+an_pcr_dt <- analyze_models(models = pcr_dt$model_without_intercept, inc_name = inc_name, method = 'pcr')
 
-pcr_dt <- create_models(team_name = team_name[2], st_name = NULL, method = 'pcr',
-                        date = Sys.Date() - 700, side = 'away', p = p, a = .01, b = .001,
-                        inc_name = ifelse(is.null(inc_name), 'pts', inc_name))
+an_glm_dt <- analyze_models(models = glm_dt$model_with_intercept, inc_name = inc_name, method = 'glm')
 
-glm_dt <- create_models(team_name = team_name[2], st_name = NULL, method = 'glm',
-                        date = Sys.Date() - 700, side = 'away', p = p, a = .01, b = .001,
-                        inc_name = ifelse(is.null(inc_name), 'pts', inc_name),
-                        family = gaussian())
+an_lm_dt1 <- analyze_models(models = lm_dt$model_with_intercept, inc_name = inc_name, method = 'lm')
 
-an_rf_dt <- analyze_models(models = rf_dt, inc_name = inc_name, method = 'rf')
-
-an_glm_dt <- analyze_models(models = glm_dt, inc_name = inc_name, method = 'glm')
-
-an_pcr_dt <- analyze_models(models = pcr_dt, inc_name = inc_name, method = 'pcr')
+an_lm_dt2 <- analyze_models(models = lm_dt$model_without_intercept, inc_name = inc_name, method = 'lm')
 
 train_control <- trainControl(method = 'LOOCV')
 
@@ -363,13 +483,13 @@ ggplot(data = DT$real_stats,
   geom_point() +
   stat_smooth()
 
-model_rf <- randomForest(data = train.data, away_score_full ~ Tackles)
+model_rf <- randomForest(inc_name ~ ., data = rf_dt$train_data)
 
 predict(model_rf, data.table(Tackles = 32))
 
 # ARIMA ----
 
-model_arima <- auto.arima(cr_dt$main_table[[inc_name]], stationary = T, seasonal = F)
+model_arima <- auto.arima(train.data[[inc_name]], stationary = T, seasonal = F)
 
 acf <- mcmc(data = cr_dt$main_table[[inc_name]]) |> autocorr(lags = c(1:10))
 
