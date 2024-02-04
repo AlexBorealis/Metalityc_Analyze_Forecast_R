@@ -20,23 +20,27 @@ create_models_basketball <- function(team_name,
                    part = 4,
                    sport = 3)
   
-  dt_names <- colnames(DT$approximated_data)[-(1:2)]
+  dt_names <- colnames(DT$approximated_data)[-c(1:2, 24)]
   
   forecast_ts <- map(dt_names, \(i) {
     
     ts <- DT$approximated_data[[i]]
     
-    adf1 <- adf.test(ts) |> suppressWarnings()
+    adf <- adf.test(ts) |> suppressWarnings()
     
-    adf2 <- adf.test(diff(ts)) |> suppressWarnings()
+    adf1 <- adf.test(diff(ts, differences = 1), k = 1) |> suppressWarnings()
     
-    if (adf1$p.value > a) {
+    adf2 <- adf.test(diff(ts, differences = 2), k = 1) |> suppressWarnings()
+    
+    if (adf$p.value > a) {
       
-      model_arima <- auto.arima(ts, d = 1, lambda = lambda, method = method, allowdrift = T, stationary = F) |> suppressWarnings()
+      model_arima <- auto.arima(ts, d = 1, lambda = lambda, method = method, allowdrift = T, stationary = F,
+                                xreg = DT$approximated_data$days_between_games) |> suppressWarnings()
       
-      if (adf2$p.value <= adf1$p.value) {
+      if (adf2$p.value < adf1$p.value & adf2$p.value > a) {
         
-        model_arima <- auto.arima(ts, d = 2, lambda = lambda, method = method, allowdrift = T, stationary = F) |> suppressWarnings()
+        model_arima <- auto.arima(ts, d = 2, lambda = lambda, method = method, allowdrift = T, stationary = F,
+                                  xreg = DT$approximated_data$days_between_games) |> suppressWarnings()
         
       } else {
         
@@ -46,13 +50,26 @@ create_models_basketball <- function(team_name,
       
     } else {
       
-      model_arima <- auto.arima(ts, d = 0, lambda = lambda, method = method, allowdrift = T, stationary = F) |> suppressWarnings()
+      model_arima <- auto.arima(ts, d = 0, lambda = lambda, method = method, allowdrift = T, stationary = F,
+                                xreg = DT$approximated_data$days_between_games) |> suppressWarnings()
       
     }
     
     forecasts <- forecast(model_arima, h = h, level = q_conf, ...) |> suppressWarnings()
     
-    if (any(forecasts$upper[, paste0(q_conf, '%')] > forecasts$mean * 3/2)) {
+    mean <- ifelse(is.na(forecasts$mean), 
+                   forecasts$mean %>% .[length(.) - 1],
+                   forecasts$mean)
+    
+    upper <- ifelse(is.na(forecasts$upper[, paste0(q_conf, '%')]), 
+                    mean * 2,
+                    forecasts$upper[, paste0(q_conf, '%')])
+    
+    lower <- ifelse(is.na(forecasts$lower[, paste0(q_conf, '%')]), 
+                    forecasts$lower[, paste0(q_conf, '%')] %>% .[length(.) - 1],
+                    forecasts$lower[, paste0(q_conf, '%')])
+    
+    if (any(upper > mean * 3/2)) {
       
       forecasts$upper[, paste0(q_conf, '%')] <- 2 * forecasts$mean - forecasts$lower[, paste0(q_conf, '%')]
       
@@ -62,7 +79,7 @@ create_models_basketball <- function(team_name,
       
     }
     
-    if (any(forecasts$lower[, paste0(q_conf, '%')] > forecasts$mean)) {
+    if (any(lower > mean)) {
       
       forecasts$lower[, paste0(q_conf, '%')] <- 0
       
@@ -74,6 +91,7 @@ create_models_basketball <- function(team_name,
     
     list('model_arima' = model_arima,
          'forecasts' = forecasts,
+         'adf' = adf,
          'adf1' = adf1,
          'adf2' = adf2)
     

@@ -2,22 +2,107 @@
 
 team_name <- c('Phoenix Suns', 'Dallas Mavericks')
 
-inc_names <- c('two_point_field_goals_made', 'three_point_field_goals_made', 'free_throws_made',
-               'assists', 'blocks', 'defensive_rebounds', 'offensive_rebounds', 
-               'personal_fouls', 'technical_fouls', 
-               'turnovers', 'steals')
+inc_names <- c('two_point_field_g._attempted', 'two_point_field_goals_made',
+               'three_point_field_g._attempted', 'three_point_field_goals_made',
+               'assists', 'blocks', 'defensive_rebounds',
+               'free_throws_attempted', 'free_throws_made',
+               'offensive_rebounds', 'personal_fouls',
+               'steals', 'technical_fouls', 'turnovers')
 
-inc_name <- inc_names[3]
+inc_name <- inc_names[1]
 
-DT <- tab_for_an(team_name = team_name[1], st_name = 'match',
-                 side = 'home', sport = 3, part = 4)
+DT <- tab_for_an(team_name = team_name[2], st_name = 'match',
+                 side = 'away', sport = 3, part = 4, date = Sys.Date() - 365)
 
+indep_vars <- DT$independene_variables
+
+names_indep_vars <- DT$independene_variables |> colnames()
+
+dep_vars <- DT$correlation_matrix[, inc_name] %>% .[!is.na(.)]
+
+names_dep_vars <- dep_vars |> names()
+
+for_formula <- dep_vars[names_dep_vars %in% names_indep_vars]
+
+form <- reformulate(termlabels = names(for_formula), response = inc_name, intercept = F)
+
+model_lm <- lm(form, data = DT$approximated_data)
+
+sum_lm <- summary(model_lm)
+
+sum_lm
+
+new_vars <- names( which(sum_lm$coefficients[, "Pr(>|t|)"] < a) )
+
+new_form <- reformulate(termlabels = new_vars, response = inc_name, intercept = F)
+
+model_lm1 <- lm(new_form, data = DT$approximated_data)
+
+sum_lm1 <- summary(model_lm1)
+
+sum_lm1
+
+dep_inc_name <- names(model_lm1$coefficients)
+
+adf.test(DT$approximated_data[[inc_name]], k = 1)
+
+adf.test(diff(DT$approximated_data[[inc_name]]), k = 1)
+
+model_arima <- auto.arima(DT$approximated_data[[inc_name]],
+                          d = 1, allowdrift = T, lambda = 'auto', 
+                          xreg = as.matrix(DT$approximated_data[, ..dep_inc_name]))
+
+plot(DT$approximated_data[[inc_name]], type = 'b', col = 'green')
+lines(model_arima$fitted, col = 'red')
+
+dt <- data.table(revd(10, location = mean(DT$approximated_data[[ dep_inc_name[1] ]] ) ),
+                 runif(10, 
+                       min(DT$approximated_data[[ dep_inc_name[2] ]] ), 
+                       max(DT$approximated_data[[ dep_inc_name[2] ]] ) )) |>
+  round(0)
+
+colnames(dt) <- dep_inc_name
+
+f1 <- forecast(model_arima, h = 10, 
+               xreg = as.matrix(dt) )
+
+adf.test(DT$approximated_data$two_point_field_goals_made, k = 1)
+
+model_arima1 <- auto.arima(DT$approximated_data$two_point_field_goals_made,
+                           d = 0, allowdrift = T, lambda = 'auto', 
+                           xreg =  DT$approximated_data[[inc_name]])
+
+plot(DT$approximated_data$two_point_field_goals_made, type = 'b', col = 'green')
+lines(model_arima1$fitted, col = 'red')
+
+f2 <- forecast(model_arima1, h = 10, xreg = f1$mean)
+
+autoplot(f2)
+
+f2$mean |> round(0)
+
+#wb <- openxlsx::createWorkbook()
+
+#openxlsx::addWorksheet(wb, sheetName = team_name[1])
+
+#openxlsx::writeDataTable(wb,
+#                         sheet = team_name[1],
+#                         x = DT$real_stats)
+
+#openxlsx::saveWorkbook(wb,
+#                       "stats.xlsx",
+#                       overwrite = TRUE)
+
+days_team_1 <- c(15, 2, 5, 1, 11, 4, 2, 1, 4, 2)
+
+days_team_2 <- c(5, 1, 2, 17, 2, 1, 2, 8, 2, 3)
 
 # Fitted arima model ----
-f <- create_models_basketball(team_name = team_name[1], side = 'home', a = .01,
-                              st_name = 'match', lambda = 'auto', h = 5)
+f <- create_models_basketball(team_name = team_name[2], side = 'away', a = .05, q_conf = 90,
+                              st_name = '4th quarter', lambda = 'auto', h = 5, date = Sys.Date() - 365,
+                              xreg = days_team_2)
 
-ind = 4
+ind = 1
 
 f$forecast_table[seq(3, nrow(f$forecast_table), 3)][ind]
 
@@ -25,14 +110,6 @@ f$forecast_table[seq(2, nrow(f$forecast_table) - 1, 3)][ind]
 
 f$forecast_table[seq(1, nrow(f$forecast_table) - 2, 3)][ind]
 
-ts <- DT$approximated_data$two_point_field_goals_made
-
-plot(ts, type = 'b', col = 'green')
-lines(f$forecast_data$two_point_field_goals_made$model_arima$fitted, col = 'blue')
-
-f1 <- forecast(f$forecast_data$two_point_field_goals_made$model_arima, h = 5, level = 80)
-
-autoplot(f1)
 
 ## Modeling time series ----
 

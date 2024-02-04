@@ -6,7 +6,8 @@ tab_for_an <- function(side = 'home',
                        date = NULL,
                        part = 2,
                        win_pts = 3,
-                       sport = 1) {
+                       sport = 1,
+                       a = .05) {
   
   # Getting table of event_id for a sending requests for a getting statistics
   events_id <- need_ids(date = date,
@@ -121,6 +122,12 @@ tab_for_an <- function(side = 'home',
     
   }
   
+  days_between_games <- c(0, difftime(main_dt$start_time[-1], 
+                                      main_dt$start_time[-length(main_dt$start_time)],
+                                      units = 'days') |> round(0))
+  
+  main_dt <- main_dt |> mutate(days_between_games = days_between_games)
+  
   # Second stage of preparing table for analyze:
   #1) remove character rows
   #2) remove NA values
@@ -183,11 +190,34 @@ tab_for_an <- function(side = 'home',
     
     }
   
+  vars_for_cor <- c('two_point_field_g._attempted', 'two_point_field_goals_made',
+                    'three_point_field_g._attempted', 'three_point_field_goals_made',
+                    'assists', 'blocks', 'defensive_rebounds',
+                    'free_throws_attempted', 'free_throws_made',
+                    'offensive_rebounds', 'personal_fouls',
+                    'steals', 'technical_fouls', 
+                    'turnovers')
+  
+  rcor <- Hmisc::rcorr(as.matrix(main_dt_no_na[, ..vars_for_cor]))
+  
+  cor <- ifelse(rcor$P < a, round(rcor$r, 3), NA)
+  
+  indep_vars <- c('assists', 'blocks', 'defensive_rebounds',
+                  'offensive_rebounds', 'personal_fouls',
+                  'steals', 'technical_fouls', 
+                  'turnovers')
+  
+  indep_rcor <- Hmisc::rcorr(as.matrix(main_dt_no_na[, ..indep_vars]))
+  
+  indep_cor <- ifelse(indep_rcor$P > a, round(indep_rcor$r, 3), NA)
+  
   # Last stage of preparing table for analyze:
   # creation list of results
   
   list('real_stats' = main_dt,
        'approximated_data' = main_dt_no_na,
+       'correlation_matrix' = cor,
+       'independene_variables' = indep_cor,
        'names_of_incident' = colnames(main_dt_no_na))
   
 }
