@@ -111,8 +111,8 @@ model_arima <- auto.arima(ts,
                           d = 1, allowdrift = T, lambda = 'auto', max.order = 10,
                           xreg = as.matrix(main_indep_vars))
 
-plot(ts, type = 'b', col = 'green')
-lines(model_arima$fitted, col = 'red')
+plot(dep_models$main_table_of_variables$two_point_field_goals_made, type = 'b', col = 'green')
+lines(dep_models$models_of_variables$two_point_field_goals_made$fitted, col = 'red')
 
 f <- forecast(model_arima, h = 10, xreg = as.matrix(main_forecast_values))
 

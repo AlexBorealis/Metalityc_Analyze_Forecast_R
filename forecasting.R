@@ -18,13 +18,14 @@ side <- sides[2]
 ## Function for a creation of models of independent variables
 creation_models <- function(tbl,
                             names_of_vars,
+                            indep_vars = T,
                             a = .05,
                             ...) {
   
   ## Creation table independent variables
   table_of_vars <- as.data.table(
     
-    map(names_of_vars, \(i) {
+    map(colnames(tbl$approximated_data), \(i) {
       
       create_ts(tbl = tbl, i, spline = F)
       
@@ -32,7 +33,7 @@ creation_models <- function(tbl,
     
   )
   
-  colnames(table_of_vars) <- names_of_vars
+  colnames(table_of_vars) <- colnames(tbl$approximated_data)
   
   ## Creation table of Dicky-Fuller's tests
   main_adf <- map(names_of_vars, \(i) {
@@ -67,12 +68,43 @@ creation_models <- function(tbl,
     
     ts <- table_of_vars[[i]]
     
-    auto.arima(ts,
-               d = diff_order[i],
-               lambda = 'auto',
-               allowdrift = T,
-               allowmean = T,
-               ...) |> suppressWarnings()
+    dep_vars <- dep_vars(tbl = tbl, names_of_vars = i)[[i]]
+    
+    if (isTRUE(indep_vars)) {
+      
+      auto.arima(ts,
+                 d = diff_order[i],
+                 lambda = 'auto',
+                 allowdrift = T,
+                 allowmean = T,
+                 ...) |> suppressWarnings()
+      
+    } else {
+      
+      if (length(dep_vars) == 0) {
+        
+        auto.arima(ts,
+                   d = diff_order[i],
+                   lambda = 'auto',
+                   allowdrift = T,
+                   allowmean = T,
+                   ...) |> suppressWarnings()
+        
+      } else {
+        
+        xreg <- as.matrix(table_of_vars |> select( all_of(dep_vars) ) )
+        
+        auto.arima(ts,
+                   d = diff_order[i],
+                   lambda = 'auto',
+                   allowdrift = T,
+                   allowmean = T,
+                   xreg = xreg,
+                   ...) |> suppressWarnings()
+        
+      }
+      
+    }
     
   })
   
@@ -82,7 +114,7 @@ creation_models <- function(tbl,
   
   colnames(table_main_adf) <- c('statistic', 'lag.order', 'alternative', 'p.value', 'method', 'data.name')
   
-  list('main_table_of_variables' = table_of_vars,
+  list('main_table_of_variables' = table_of_vars |> select(all_of(names_of_vars)),
        'main_table_of_Dicky_Fullers_test' = table_main_adf,
        'vector_of_differentiation_orders' = diff_order,
        'models_of_variables' = main_arima)
@@ -92,133 +124,178 @@ creation_models <- function(tbl,
 
 ## Function for a creation of forecasting values of independent variables
 forecasting_models <- function(tbl,
-                               days,
                                names_of_vars,
                                models,
-                               conf_int,
-                               period = NULL,
+                               h = 55,
                                indep_vars = T,
+                               forecast_models1 = NULL,
+                               forecast_models2 = NULL,
                                ...) {
   
-  ## Period of forecasting
   if (isTRUE(indep_vars)) {
     
-    period <- cumsum(days) %>% .[length(.)]
+    NULL
     
   } else {
     
-    period <- period
+    dep_vars <- dep_vars(tbl = tbl, names_of_vars = names_of_vars)
     
   }
   
   ## Creation table of forecasting values for independent variables
-  ### lower - lower boarder of significant interval
-  lower_forecast_values <- as.data.table(
+  ### 1) lower boarder of confidence interval
+  lower_values <- as.data.table(
     
     map(names_of_vars, \(i) {
       
-      f <- forecast(models$models_of_variables[[i]], 
-                    h = period,
-                    ...)
-      
       if (isTRUE(indep_vars)) {
         
-        round(f$lower, 0)[, paste0(conf_int, '%')][days]
+        f <- forecast(models$models_of_variables[[i]], 
+                      h = h,
+                      ...)
         
       } else {
         
-        round(f$lower, 0)[, paste0(conf_int, '%')]
+        if (length(dep_vars[[i]]) == 0) {
+          
+          f <- forecast(dep_models$models_of_variables[[i]], 
+                        h = h,
+                        ...)
+          
+        } else {
+          
+          if (is.null(forecast_models2)) {
+            
+            xreg <- as.matrix( forecast_models1 |>
+                                 select( dep_vars[[i]] ) )
+            
+          } else {
+            
+            xreg <- as.matrix( forecast_models1 |>
+                                 cbind(forecast_models2) |>
+                                 select( dep_vars[[i]] ) )
+            
+          }
+          
+          f <- forecast(dep_models$models_of_variables[[i]], 
+                        h = h,
+                        ...,
+                        xreg = xreg)
+          
+        }
         
       }
+      
+      abs(round(f$lower[, 1], 0))
       
     })
     
   )
   
-  
-  ### mean - mean value
-  mean_forecast_values <- as.data.table(
+  ### 2) mean of confidence interval
+  mean_values <- as.data.table(
     
     map(names_of_vars, \(i) {
       
-      f <- forecast(models$models_of_variables[[i]], 
-                    h = period,
-                    ...)
-      
       if (isTRUE(indep_vars)) {
         
-        round(f$mean, 0)[days]
+        f <- forecast(models$models_of_variables[[i]], 
+                      h = h,
+                      ...)
         
       } else {
         
-        round(f$mean, 0)
+        if (length(dep_vars[[i]]) == 0) {
+          
+          f <- forecast(models$models_of_variables[[i]], 
+                        h = h,
+                        ...)
+          
+        } else {
+          
+          if (is.null(forecast_models2)) {
+            
+            xreg <- as.matrix( forecast_models1 |>
+                                 select( dep_vars[[i]] ) )
+            
+          } else {
+            
+            xreg <- as.matrix( forecast_models1 |>
+                                 cbind(forecast_models2) |>
+                                 select( dep_vars[[i]] ) )
+            
+          }
+          
+          f <- forecast(models$models_of_variables[[i]], 
+                        h = h,
+                        xreg = xreg,
+                        ...)
+          
+        }
         
       }
+      
+      abs(round(f$mean, 0))
       
     })
     
   )
   
-  
-  ### upper - upper boarder of significant interval
-  upper_forecast_values <- as.data.table(
+  ### 3) upper boarder of confidence interval
+  upper_values <- as.data.table(
     
     map(names_of_vars, \(i) {
       
-      f <- forecast(models$models_of_variables[[i]],
-                    h = period,
-                    ...)
-      
       if (isTRUE(indep_vars)) {
         
-        round(f$upper, 0)[, paste0(conf_int, '%')][days]
+        f <- forecast(models$models_of_variables[[i]], 
+                      h = h,
+                      ...)
         
       } else {
         
-        round(f$upper, 0)[, paste0(conf_int, '%')]
+        if (length(dep_vars[[i]]) == 0) {
+          
+          f <- forecast(models$models_of_variables[[i]], 
+                        h = h,
+                        ...)
+          
+        } else {
+          
+          if (is.null(forecast_models2)) {
+            
+            xreg <- as.matrix( forecast_models1 |>
+                                 select( dep_vars[[i]] ) )
+            
+          } else {
+            
+            xreg <- as.matrix( forecast_models1 |>
+                                 cbind(forecast_models2) |>
+                                 select( dep_vars[[i]] ) )
+            
+          }
+          
+          f <- forecast(models$models_of_variables[[i]], 
+                        h = h,
+                        xreg = xreg,
+                        ...)
+          
+        }
         
       }
+      
+      abs(round(f$upper[, 1], 0))
       
     })
     
   )
   
-  colnames(lower_forecast_values) <- names_of_vars
-  colnames(mean_forecast_values) <- names_of_vars
-  colnames(upper_forecast_values) <- names_of_vars
+  colnames(lower_values) <- names_of_vars
+  colnames(mean_values) <- names_of_vars
+  colnames(upper_values) <- names_of_vars
   
-  list('lower_forecast_values' = lower_forecast_values,
-       'mean_forecast_values' = mean_forecast_values,
-       'upper_forecast_values' = upper_forecast_values)
+  list('lower_values' = lower_values,
+       'mean_values' = mean_values,
+       'upper_values' = upper_values)
   
 }
-
-## Testing forecasting variables
-models <- creation_models(tbl = DT,
-                          names_of_vars = DT$independent_variables)
-
-forecast_models <- forecasting_models(tbl = DT,
-                                      days = days_between_games_t2,
-                                      names_of_vars = DT$independent_variables,
-                                      models = models,
-                                      level = c(80, 95),
-                                      conf_int = 95)
-
-## Forecasting variables
-dep_models <- creation_models(tbl = DT,
-                              names_of_vars = inc_names,
-                              a = .01)
-
-plot(dep_models$main_table_of_variables$free_throws_made, type = 'b', col = 'green')
-lines(dep_models$models_of_variables$free_throws_made$fitted, col = 'red')
-
-R2(dep_models$models_of_variables$free_throws_made$fitted,
-   dep_models$main_table_of_variables$free_throws_made)
-
-forecast_dep_models <- forecasting_models(tbl = DT,
-                                          models = dep_models,
-                                          names_of_vars = inc_names,
-                                          conf_int = 95,
-                                          level = c(80, 95),
-                                          indep_vars = F,
-                                          period = 3)

@@ -202,7 +202,8 @@ tab_for_an <- function(side = 'home',
   
   cor <- ifelse(rcor$P < a, round(rcor$r, 3), NA)
   
-  indep_vars <- c('assists', 'blocks', 'defensive_rebounds',
+  indep_vars <- c('two_point_field_g._attempted', 'three_point_field_g._attempted', 'free_throws_attempted',
+                  'assists', 'blocks', 'defensive_rebounds',
                   'offensive_rebounds', 'personal_fouls',
                   'steals', 'technical_fouls', 
                   'turnovers')
@@ -252,5 +253,24 @@ create_ts <- function(tbl,
   }
   
   dt$event
+  
+}
+
+dep_vars <- function(tbl,
+                     names_of_vars) {
+  
+  indep_vars <- tbl$independent_variables
+  
+  lst <- map(names_of_vars, \(i) {
+    
+    vars <- tbl$main_correlation_matrix[, i] %>% .[!is.na(.)]
+    
+    names(vars)[!(names(vars) %ilike% 'made')]
+    
+  })
+  
+  names(lst) <- names_of_vars
+  
+  lst
   
 }
