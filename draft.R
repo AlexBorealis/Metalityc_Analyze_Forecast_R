@@ -9,38 +9,120 @@ inc_names <- c('two_point_field_g._attempted', 'two_point_field_goals_made',
                'offensive_rebounds', 'personal_fouls',
                'steals', 'technical_fouls', 'turnovers')
 
+sides <- c('home', 'away')
+
+days_between_games_t1 <- c(15, 2, 5, 1, 11, 4, 2, 1, 4, 2)
+
+days_between_games_t2 <- c(14, 5, 1, 2, 16, 2, 1, 2, 8, 2)
+
 inc_name <- inc_names[1]
 
+side <- sides[2]
+
 DT <- tab_for_an(team_name = team_name[2], st_name = 'match',
-                 side = 'away', sport = 3, part = 4, date = Sys.Date() - 365)
+                 side = side, sport = 3, part = 4, date = Sys.Date() - 200)
 
-indep_vars <- DT$independene_variables
+indep_vars <- DT$indep_vars_correlation_matrix
 
-names_indep_vars <- DT$independene_variables |> colnames()
+names_indep_vars <- colnames(DT$indep_vars_correlation_matrix)
 
-dep_vars <- DT$correlation_matrix[, inc_name] %>% .[!is.na(.)]
+####
 
-names_dep_vars <- dep_vars |> names()
+main_indep_vars <- as.data.table(
+  
+  map(names_indep_vars, \(i) {
+    
+    create_ts(tbl = DT, i, spline = F)
+    
+  })
+  
+)
 
-for_formula <- dep_vars[names_dep_vars %in% names_indep_vars]
+colnames(main_indep_vars) <- names_indep_vars
 
-form <- reformulate(termlabels = names(for_formula), response = inc_name, intercept = F)
+main_adf <- map(names_indep_vars, \(i) {
+  
+  ts <- main_indep_vars[[i]]
+  
+  adf.test(ts)
+  
+})
 
-model_lm <- lm(form, data = DT$approximated_data)
+names(main_adf) <- names_indep_vars
 
-sum_lm <- summary(model_lm)
+diff_order <- map_int(names_indep_vars, \(i) {
+  
+  if (main_adf[[i]]$p.value < a) {
+    
+    d_order <- 0
+    
+  } else {
+    
+    d_order <- 1
+    
+  }
+  
+})
 
-sum_lm
+names(diff_order) <- names_indep_vars
 
-new_vars <- names( which(sum_lm$coefficients[, "Pr(>|t|)"] < a) )
+main_arima <- map(names_indep_vars, \(i) {
+  
+  ts <- main_indep_vars[[i]]
+  
+  auto.arima(ts,
+             d = diff_order[i],
+             lambda = 'auto',
+             max.order = 10)
+  
+})
 
-new_form <- reformulate(termlabels = new_vars, response = inc_name, intercept = F)
+names(main_arima) <- names_indep_vars
 
-model_lm1 <- lm(new_form, data = DT$approximated_data)
+main_forecast_values <- as.data.table(
+  
+  map(names_indep_vars, \(i) {
+    
+    if (side == 'home') {
+      
+      f <- forecast(main_arima[[i]], h = cumsum(days_between_games_t1) %>% .[length(.)])
+      
+      round(f$mean, 0)[days_between_games_t1]
+      
+    } else {
+      
+      f <- forecast(main_arima[[i]], h = cumsum(days_between_games_t2) %>% .[length(.)])
+      
+      round(f$mean, 0)[days_between_games_t2]
+      
+    }
+    
+  })
+  
+)
 
-sum_lm1 <- summary(model_lm1)
+colnames(main_forecast_values) <- names_indep_vars
 
-sum_lm1
+ts <- create_ts(DT, inc_name = inc_name)
+
+adf.test(ts)
+
+model_arima <- auto.arima(ts,
+                          d = 1, allowdrift = T, lambda = 'auto', max.order = 10,
+                          xreg = as.matrix(main_indep_vars))
+
+plot(ts, type = 'b', col = 'green')
+lines(model_arima$fitted, col = 'red')
+
+f <- forecast(model_arima, h = 10, xreg = as.matrix(main_forecast_values))
+
+autoplot(f)
+
+round(f$mean, 0)
+
+R2(model_arima$fitted, ts)
+
+####
 
 dep_inc_name <- names(model_lm1$coefficients)
 
@@ -49,8 +131,8 @@ adf.test(DT$approximated_data[[inc_name]], k = 1)
 adf.test(diff(DT$approximated_data[[inc_name]]), k = 1)
 
 model_arima <- auto.arima(DT$approximated_data[[inc_name]],
-                          d = 1, allowdrift = T, lambda = 'auto', 
-                          xreg = as.matrix(DT$approximated_data[, ..dep_inc_name]))
+                          d = 0, allowdrift = T, lambda = 'auto', 
+                          xreg = as.matrix(DT$approximated_data[, ..names_indep_vars]))
 
 plot(DT$approximated_data[[inc_name]], type = 'b', col = 'green')
 lines(model_arima$fitted, col = 'red')
@@ -64,7 +146,9 @@ dt <- data.table(revd(10, location = mean(DT$approximated_data[[ dep_inc_name[1]
 colnames(dt) <- dep_inc_name
 
 f1 <- forecast(model_arima, h = 10, 
-               xreg = as.matrix(dt) )
+               xreg = rnorm(10,
+                            mean = mean(DT$approximated_data[[dep_inc_name]]),
+                            sd = sd(DT$approximated_data[[dep_inc_name]]) ) )
 
 adf.test(DT$approximated_data$two_point_field_goals_made, k = 1)
 

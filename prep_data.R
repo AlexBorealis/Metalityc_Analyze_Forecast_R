@@ -216,8 +216,41 @@ tab_for_an <- function(side = 'home',
   
   list('real_stats' = main_dt,
        'approximated_data' = main_dt_no_na,
-       'correlation_matrix' = cor,
-       'independene_variables' = indep_cor,
-       'names_of_incident' = colnames(main_dt_no_na))
+       'main_correlation_matrix' = cor,
+       'indep_vars_correlation_matrix' = indep_cor,
+       'independent_variables' = colnames(indep_cor))
+  
+}
+
+create_ts <- function(tbl,
+                      inc_name,
+                      spline = F) {
+  
+  num_observ <- cumsum(tbl$approximated_data[days_between_games < 20, days_between_games])
+  
+  observ <- tbl$approximated_data[days_between_games < 20][[inc_name]]
+  
+  if (isFALSE(spline)) {
+    
+    dt <- data.table(t = 1:num_observ[length(num_observ)]) |>
+      left_join(data.table(t = num_observ,
+                           event = observ),
+                by = 't') %>%
+      .[, map(.SD, \(i) round( zoo::na.approx(i, na.rm = F), 0) ), .SDcols = colnames(.)] |>
+      na.omit()
+    
+  } else {
+    
+    dt <- data.table(t = 1:num_observ[length(num_observ)]) |>
+      left_join(data.table(t = num_observ,
+                           event = observ),
+                by = 't') %>%
+      .[, map(.SD, \(i) round( zoo::na.spline(i, na.rm = F), 0) ), .SDcols = colnames(.)] |>
+      na.omit() |>
+      filter(t > min(num_observ))
+    
+  }
+  
+  dt$event
   
 }

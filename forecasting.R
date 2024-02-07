@@ -1,192 +1,224 @@
-create_models_basketball <- function(team_name,
-                                     side = 'home',
-                                     update_stats = F,
-                                     method = "CSS-ML",
-                                     lambda = NULL,
-                                     st_name = NULL,
-                                     ev_id = NULL,
-                                     date = NULL,
-                                     q_conf = 80,
-                                     h = 1,
-                                     a = .05,
-                                     ...) {
+## Creation required variables for forecasting
+team_name <- c('Phoenix Suns', 'Dallas Mavericks')
+
+inc_names <- c('two_point_field_g._attempted', 'two_point_field_goals_made',
+               'three_point_field_g._attempted', 'three_point_field_goals_made',
+               'free_throws_attempted', 'free_throws_made')
+
+sides <- c('home', 'away')
+
+days_between_games_t1 <- c(15, 2, 5, 1, 11, 4, 2, 1, 4, 2)
+
+days_between_games_t2 <- c(14, 5, 1, 2, 16, 2, 1, 2, 8, 2)
+
+inc_name <- inc_names[1]
+
+side <- sides[2]
+
+## Function for a creation of models of independent variables
+creation_models <- function(tbl,
+                            names_of_vars,
+                            a = .05,
+                            ...) {
   
-  DT <- tab_for_an(side = side,
-                   update_stats = update_stats,
-                   team_name = team_name,
-                   st_name = st_name,
-                   ev_id = ev_id,
-                   date = date,
-                   part = 4,
-                   sport = 3)
-  
-  dt_names <- colnames(DT$approximated_data)[-c(1:2, 24)]
-  
-  forecast_ts <- map(dt_names, \(i) {
+  ## Creation table independent variables
+  table_of_vars <- as.data.table(
     
-    ts <- DT$approximated_data[[i]]
-    
-    adf <- adf.test(ts) |> suppressWarnings()
-    
-    adf1 <- adf.test(diff(ts, differences = 1), k = 1) |> suppressWarnings()
-    
-    adf2 <- adf.test(diff(ts, differences = 2), k = 1) |> suppressWarnings()
-    
-    if (adf$p.value > a) {
+    map(names_of_vars, \(i) {
       
-      model_arima <- auto.arima(ts, d = 1, lambda = lambda, method = method, allowdrift = T, stationary = F,
-                                xreg = DT$approximated_data$days_between_games) |> suppressWarnings()
-      
-      if (adf2$p.value < adf1$p.value & adf2$p.value > a) {
-        
-        model_arima <- auto.arima(ts, d = 2, lambda = lambda, method = method, allowdrift = T, stationary = F,
-                                  xreg = DT$approximated_data$days_between_games) |> suppressWarnings()
-        
-      } else {
-        
-        model_arima
-        
-      }
-      
-    } else {
-      
-      model_arima <- auto.arima(ts, d = 0, lambda = lambda, method = method, allowdrift = T, stationary = F,
-                                xreg = DT$approximated_data$days_between_games) |> suppressWarnings()
-      
-    }
-    
-    forecasts <- forecast(model_arima, h = h, level = q_conf, ...) |> suppressWarnings()
-    
-    mean <- ifelse(is.na(forecasts$mean), 
-                   forecasts$mean %>% .[length(.) - 1],
-                   forecasts$mean)
-    
-    upper <- ifelse(is.na(forecasts$upper[, paste0(q_conf, '%')]), 
-                    mean * 2,
-                    forecasts$upper[, paste0(q_conf, '%')])
-    
-    lower <- ifelse(is.na(forecasts$lower[, paste0(q_conf, '%')]), 
-                    forecasts$lower[, paste0(q_conf, '%')] %>% .[length(.) - 1],
-                    forecasts$lower[, paste0(q_conf, '%')])
-    
-    if (any(upper > mean * 3/2)) {
-      
-      forecasts$upper[, paste0(q_conf, '%')] <- 2 * forecasts$mean - forecasts$lower[, paste0(q_conf, '%')]
-      
-    } else {
-      
-      forecasts$upper[, paste0(q_conf, '%')] <- forecasts$upper[, paste0(q_conf, '%')]
-      
-    }
-    
-    if (any(lower > mean)) {
-      
-      forecasts$lower[, paste0(q_conf, '%')] <- 0
-      
-    } else {
-      
-      forecasts$lower[, paste0(q_conf, '%')] <- forecasts$lower[, paste0(q_conf, '%')]
-      
-    }
-    
-    list('model_arima' = model_arima,
-         'forecasts' = forecasts,
-         'adf' = adf,
-         'adf1' = adf1,
-         'adf2' = adf2)
-    
-  }, .progress = T)
-  
-  names(forecast_ts) <- dt_names
-  
-  forecast_dt <- as.data.table(
-    
-    map(dt_names, \(i) {
-      
-      map_df(1:h, \(j) {
-        
-        data.table(
-          
-          list(
-            
-            forecast_ts[[i]]$forecasts$upper[j, paste0(q_conf, '%')],
-            forecast_ts[[i]]$forecasts$mean[j],
-            forecast_ts[[i]]$forecasts$lower[j, paste0(q_conf, '%')]
-            
-          )
-          
-        )
-        
-      })
+      create_ts(tbl = tbl, i, spline = F)
       
     })
     
   )
   
-  colnames(forecast_dt) <- dt_names
+  colnames(table_of_vars) <- names_of_vars
   
-  if (side == 'home') {
+  ## Creation table of Dicky-Fuller's tests
+  main_adf <- map(names_of_vars, \(i) {
     
-    new_forecast_dt <- forecast_dt |>
-      mutate_all(as.numeric) |>
-      mutate(two_point_field_g._attempted = round(two_point_field_g._attempted, 0),
-             two_point_field_goals = round(round(two_point_field_goals_made, 0) / round(two_point_field_g._attempted, 0), 2),
-             two_point_field_goals_made = round(two_point_field_goals_made, 0),
-             three_point_field_g._attempted = round(three_point_field_g._attempted, 0),
-             three_point_field_goals = round(round(three_point_field_goals_made, 0) / round(three_point_field_g._attempted, 0), 2),
-             three_point_field_goals_made = round(three_point_field_goals_made, 0),
-             free_throws_attempted = round(free_throws_attempted, 0),
-             free_throws = round(round(free_throws_made, 0) / round(free_throws_attempted, 0), 2),
-             free_throws_made = round(free_throws_made, 0),
-             offensive_rebounds = round(offensive_rebounds, 0),
-             defensive_rebounds = round(defensive_rebounds, 0),
-             blocks = round(blocks, 0),
-             steals = round(steals, 0),
-             assists = round(assists, 0),
-             turnovers = round(turnovers, 0),
-             personal_fouls = round(personal_fouls, 0),
-             technical_fouls = round(technical_fouls, 0)) |>
-      mutate(field_goals_attempted = two_point_field_g._attempted + three_point_field_g._attempted,
-             field_goals = round(round(field_goals_made, 0) / round(field_goals_attempted, 0), 2),
-             field_goals_made = round(two_point_field_goals_made, 0) + round(three_point_field_goals_made, 0),
-             total_rebounds = round(offensive_rebounds, 0) + round(defensive_rebounds, 0),
-             home_score_full = two_point_field_goals_made * 2 + three_point_field_goals_made * 3 + free_throws_made) %>%
-      mutate_all(~ifelse(. < 0 | is.infinite(.), 0, .))
+    ts <- table_of_vars[[i]]
+    
+    adf.test(ts) |> suppressWarnings()
+    
+  })
+  
+  names(main_adf) <- names_of_vars
+  
+  ## Creation of vectors of differentiation orders
+  diff_order <- map_int(names_of_vars, \(i) {
+    
+    if (main_adf[[i]]$p.value < a) {
+      
+      d_order <- 0
+      
+    } else {
+      
+      d_order <- 1
+      
+    }
+    
+  })
+  
+  names(diff_order) <- names_of_vars
+  
+  ## Creation ARIMA models for independent variables
+  main_arima <- map(names_of_vars, \(i) {
+    
+    ts <- table_of_vars[[i]]
+    
+    auto.arima(ts,
+               d = diff_order[i],
+               lambda = 'auto',
+               allowdrift = T,
+               allowmean = T,
+               ...) |> suppressWarnings()
+    
+  })
+  
+  names(main_arima) <- names_of_vars
+  
+  table_main_adf <- t(as.data.table(main_adf))
+  
+  colnames(table_main_adf) <- c('statistic', 'lag.order', 'alternative', 'p.value', 'method', 'data.name')
+  
+  list('main_table_of_variables' = table_of_vars,
+       'main_table_of_Dicky_Fullers_test' = table_main_adf,
+       'vector_of_differentiation_orders' = diff_order,
+       'models_of_variables' = main_arima)
+  
+  
+}
+
+## Function for a creation of forecasting values of independent variables
+forecasting_models <- function(tbl,
+                               days,
+                               names_of_vars,
+                               models,
+                               conf_int,
+                               period = NULL,
+                               indep_vars = T,
+                               ...) {
+  
+  ## Period of forecasting
+  if (isTRUE(indep_vars)) {
+    
+    period <- cumsum(days) %>% .[length(.)]
     
   } else {
     
-    new_forecast_dt <- forecast_dt |>
-      mutate_all(as.numeric) |>
-      mutate(two_point_field_g._attempted = round(two_point_field_g._attempted, 0),
-             two_point_field_goals = round(round(two_point_field_goals_made, 0) / round(two_point_field_g._attempted, 0), 2),
-             two_point_field_goals_made = round(two_point_field_goals_made, 0),
-             three_point_field_g._attempted = round(three_point_field_g._attempted, 0),
-             three_point_field_goals = round(round(three_point_field_goals_made, 0) / round(three_point_field_g._attempted, 0), 2),
-             three_point_field_goals_made = round(three_point_field_goals_made, 0),
-             free_throws_attempted = round(free_throws_attempted, 0),
-             free_throws = round(round(free_throws_made, 0) / round(free_throws_attempted, 0), 2),
-             free_throws_made = round(free_throws_made, 0),
-             offensive_rebounds = round(offensive_rebounds, 0),
-             defensive_rebounds = round(defensive_rebounds, 0),
-             blocks = round(blocks, 0),
-             steals = round(steals, 0),
-             assists = round(assists, 0),
-             turnovers = round(turnovers, 0),
-             personal_fouls = round(personal_fouls, 0),
-             technical_fouls = round(technical_fouls, 0)) |>
-      mutate(field_goals_attempted = two_point_field_g._attempted + three_point_field_g._attempted,
-             field_goals = round(round(field_goals_made, 0) / round(field_goals_attempted, 0), 2),
-             field_goals_made = round(two_point_field_goals_made, 0) + round(three_point_field_goals_made, 0),
-             total_rebounds = round(offensive_rebounds, 0) + round(defensive_rebounds, 0),
-             away_score_full = two_point_field_goals_made * 2 + three_point_field_goals_made * 3 + free_throws_made) %>%
-      mutate_all(~ifelse(. < 0 | is.infinite(.), 0, .))
+    period <- period
     
   }
   
-  gc(reset = T, full = T)
+  ## Creation table of forecasting values for independent variables
+  ### lower - lower boarder of significant interval
+  lower_forecast_values <- as.data.table(
+    
+    map(names_of_vars, \(i) {
+      
+      f <- forecast(models$models_of_variables[[i]], 
+                    h = period,
+                    ...)
+      
+      if (isTRUE(indep_vars)) {
+        
+        round(f$lower, 0)[, paste0(conf_int, '%')][days]
+        
+      } else {
+        
+        round(f$lower, 0)[, paste0(conf_int, '%')]
+        
+      }
+      
+    })
+    
+  )
   
-  list('forecast_table' = new_forecast_dt,
-       'forecast_data' = forecast_ts,
-       'main_table' = DT)
+  
+  ### mean - mean value
+  mean_forecast_values <- as.data.table(
+    
+    map(names_of_vars, \(i) {
+      
+      f <- forecast(models$models_of_variables[[i]], 
+                    h = period,
+                    ...)
+      
+      if (isTRUE(indep_vars)) {
+        
+        round(f$mean, 0)[days]
+        
+      } else {
+        
+        round(f$mean, 0)
+        
+      }
+      
+    })
+    
+  )
+  
+  
+  ### upper - upper boarder of significant interval
+  upper_forecast_values <- as.data.table(
+    
+    map(names_of_vars, \(i) {
+      
+      f <- forecast(models$models_of_variables[[i]],
+                    h = period,
+                    ...)
+      
+      if (isTRUE(indep_vars)) {
+        
+        round(f$upper, 0)[, paste0(conf_int, '%')][days]
+        
+      } else {
+        
+        round(f$upper, 0)[, paste0(conf_int, '%')]
+        
+      }
+      
+    })
+    
+  )
+  
+  colnames(lower_forecast_values) <- names_of_vars
+  colnames(mean_forecast_values) <- names_of_vars
+  colnames(upper_forecast_values) <- names_of_vars
+  
+  list('lower_forecast_values' = lower_forecast_values,
+       'mean_forecast_values' = mean_forecast_values,
+       'upper_forecast_values' = upper_forecast_values)
   
 }
+
+## Testing forecasting variables
+models <- creation_models(tbl = DT,
+                          names_of_vars = DT$independent_variables)
+
+forecast_models <- forecasting_models(tbl = DT,
+                                      days = days_between_games_t2,
+                                      names_of_vars = DT$independent_variables,
+                                      models = models,
+                                      level = c(80, 95),
+                                      conf_int = 95)
+
+## Forecasting variables
+dep_models <- creation_models(tbl = DT,
+                              names_of_vars = inc_names,
+                              a = .01)
+
+plot(dep_models$main_table_of_variables$free_throws_made, type = 'b', col = 'green')
+lines(dep_models$models_of_variables$free_throws_made$fitted, col = 'red')
+
+R2(dep_models$models_of_variables$free_throws_made$fitted,
+   dep_models$main_table_of_variables$free_throws_made)
+
+forecast_dep_models <- forecasting_models(tbl = DT,
+                                          models = dep_models,
+                                          names_of_vars = inc_names,
+                                          conf_int = 95,
+                                          level = c(80, 95),
+                                          indep_vars = F,
+                                          period = 3)

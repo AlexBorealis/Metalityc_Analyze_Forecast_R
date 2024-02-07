@@ -19,8 +19,4 @@ heatmap_cor <- function(m,
   
 }
 
-analyze_models <- function(...) {
-  
-  
-  
-}
+

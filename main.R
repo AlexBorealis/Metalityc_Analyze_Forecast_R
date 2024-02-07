@@ -35,4 +35,8 @@ source(paste0(getwd(), "/forecasting.R"), local = T)
 
 #mean_int_table <- map_dfr(teams_id, \(i) mean_goals_int(table = table_tournament_result_soccer, sport = 1, table_team = table_team_data_soccer, i))
 
-save.image(getwd(), "/", list.files(getwd(), pattern = ".RData"))
+## Creation main table ----
+DT <- tab_for_an(team_name = team_name[2], st_name = 'match',
+                 side = side, sport = 3, part = 4, date = Sys.Date() - 200)
+
+#save.image(getwd(), "/", list.files(getwd(), pattern = ".RData"))
