@@ -7,3 +7,4 @@ endpoints <- jsonlite::read_json("endpoints.json", simplifyVector = T) # List ne
 locale <- data.table(read.table("locale_vars.txt", header = T)) # Table of locales
 
 standing_type <- data.table(read.table("standing_type_vars.txt", header = T)) # Table of standings
+

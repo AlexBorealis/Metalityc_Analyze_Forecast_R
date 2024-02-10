@@ -7,7 +7,8 @@ tab_for_an <- function(side = 'home',
                        part = 2,
                        win_pts = 3,
                        sport = 1,
-                       a = .05) {
+                       a = .05,
+                       b = .1) {
   
   # Getting table of event_id for a sending requests for a getting statistics
   events_id <- need_ids(date = date,
@@ -122,7 +123,7 @@ tab_for_an <- function(side = 'home',
     
   }
   
-  days_between_games <- c(0, difftime(main_dt$start_time[-1], 
+  days_between_games <- c(1, difftime(main_dt$start_time[-1], 
                                       main_dt$start_time[-length(main_dt$start_time)],
                                       units = 'days') |> round(0))
   
@@ -202,15 +203,14 @@ tab_for_an <- function(side = 'home',
   
   cor <- ifelse(rcor$P < a, round(rcor$r, 3), NA)
   
-  indep_vars <- c('two_point_field_g._attempted', 'three_point_field_g._attempted', 'free_throws_attempted',
-                  'assists', 'blocks', 'defensive_rebounds',
+  indep_vars <- c('assists', 'blocks', 'defensive_rebounds',
                   'offensive_rebounds', 'personal_fouls',
                   'steals', 'technical_fouls', 
                   'turnovers')
   
   indep_rcor <- Hmisc::rcorr(as.matrix(main_dt_no_na[, ..indep_vars]))
   
-  indep_cor <- ifelse(indep_rcor$P > a, round(indep_rcor$r, 3), NA)
+  indep_cor <- ifelse(indep_rcor$P > b | indep_rcor$r == 1, round(indep_rcor$r, 3), NA)
   
   # Last stage of preparing table for analyze:
   # creation list of results
@@ -259,18 +259,56 @@ create_ts <- function(tbl,
 dep_vars <- function(tbl,
                      names_of_vars) {
   
-  indep_vars <- tbl$independent_variables
-  
   lst <- map(names_of_vars, \(i) {
     
     vars <- tbl$main_correlation_matrix[, i] %>% .[!is.na(.)]
     
-    names(vars)[!(names(vars) %ilike% 'made')]
+    if (isTRUE(all(names_of_vars %ilike% 'made'))) {
+      
+      vars_names <- names(vars)[!(names(vars) %ilike% 'made')]
+      
+    } else {
+      
+      vars_names <- names(vars)[!(names(vars) %ilike% 'attempted|made')]
+      
+    }
+    
+    if (length(vars_names) > 0) {
+      
+      form <- reformulate(vars_names, response = i, intercept = F)
+      
+      lm <- lm(form, data = tbl$approximated_data)
+      
+      sum_lm <- summary(lm)
+      
+      vec_names <- ifelse(sum_lm$coefficients[, "Pr(>|t|)"] < a & sum_lm$adj.r.squared > .6,
+                          rownames(sum_lm$coefficients),
+                          NA)
+      
+      names(vec_names) <- NULL
+      
+      vec_names[!is.na(vec_names)]
+      
+    } else {
+      
+      vars_names
+      
+    }
     
   })
   
-  names(lst) <- names_of_vars
-  
-  lst
+  if (length(lst) > 1) {
+    
+    names(lst) <- names_of_vars
+    
+    lst
+    
+  } else {
+    
+    names(lst) <- names_of_vars
+    
+    lst[[names_of_vars]]
+    
+  }
   
 }

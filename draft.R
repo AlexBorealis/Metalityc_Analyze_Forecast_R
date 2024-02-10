@@ -1,24 +1,5 @@
 # Testing methods ----
 
-team_name <- c('Phoenix Suns', 'Dallas Mavericks')
-
-inc_names <- c('two_point_field_g._attempted', 'two_point_field_goals_made',
-               'three_point_field_g._attempted', 'three_point_field_goals_made',
-               'assists', 'blocks', 'defensive_rebounds',
-               'free_throws_attempted', 'free_throws_made',
-               'offensive_rebounds', 'personal_fouls',
-               'steals', 'technical_fouls', 'turnovers')
-
-sides <- c('home', 'away')
-
-days_between_games_t1 <- c(15, 2, 5, 1, 11, 4, 2, 1, 4, 2)
-
-days_between_games_t2 <- c(14, 5, 1, 2, 16, 2, 1, 2, 8, 2)
-
-inc_name <- inc_names[1]
-
-side <- sides[2]
-
 DT <- tab_for_an(team_name = team_name[2], st_name = 'match',
                  side = side, sport = 3, part = 4, date = Sys.Date() - 200)
 
@@ -28,142 +9,70 @@ names_indep_vars <- colnames(DT$indep_vars_correlation_matrix)
 
 ####
 
-main_indep_vars <- as.data.table(
+main_arima <- creation_models(DT, 'free_throws_attempted', a = .01)
+
+ts <- create_ts(DT, 'free_throws_attempted')
+
+model_arima <- auto.arima(ts, trace = T, lambda = 'auto', 
+                          test.args = list(a = .01), seasonal.test.args = list(a = .01, max.D = 2),
+                          allowdrift = T, allowmean = T, max.order = 10, seasonal = T,
+                          xreg = matrix(c(create_ts(DT, 'defensive_rebounds'), create_ts(DT, 'personal_fouls')),
+                                        ncol = 2, dimnames = list(NULL,
+                                                                  c('defensive_rebounds', 'personal_fouls') ) ) )
+
+checkresiduals(model_arima)
   
-  map(names_indep_vars, \(i) {
-    
-    create_ts(tbl = DT, i, spline = F)
-    
-  })
-  
-)
+plot(ts,
+     type = 'b', col = 'green')
+lines(dep_models$models_of_variables$free_throws_attempted$fitted |> round(0), col = 'red')
+points(x = cumsum(DT$approximated_data$days_between_games),
+       y = DT$approximated_data$assists,
+       col = 'blue')
 
-colnames(main_indep_vars) <- names_indep_vars
+R2(ts, model_arima$fitted)
 
-main_adf <- map(names_indep_vars, \(i) {
-  
-  ts <- main_indep_vars[[i]]
-  
-  adf.test(ts)
-  
-})
+xreg <- matrix(c(forecast(models$models_of_variables$defensive_rebounds, h = 17)$mean,
+                 forecast(models$models_of_variables$personal_fouls, h = 17)$mean),
+               ncol = 2, dimnames = list(NULL,
+                                         c('defensive_rebounds', 'personal_fouls') ))
 
-names(main_adf) <- names_indep_vars
+f <- forecast(main_arima$models_of_variables$free_throws_attempted, h = 19)
 
-diff_order <- map_int(names_indep_vars, \(i) {
-  
-  if (main_adf[[i]]$p.value < a) {
-    
-    d_order <- 0
-    
-  } else {
-    
-    d_order <- 1
-    
-  }
-  
-})
+ts1 <- create_ts(DT, 'free_throws_attempted')
 
-names(diff_order) <- names_indep_vars
+model_arima1 <- auto.arima(ts1, trace = T, lambda = 'auto', 
+                           test.args = list(a = .01), seasonal.test.args = list(a = .01, max.D = 2),
+                           allowdrift = T, allowmean = T, max.order = 10, seasonal = T,
+                           xreg = matrix(model_arima$fitted,
+                                         ncol = 1, dimnames = list(NULL,
+                                                                   c('assists') ) ) ) 
 
-main_arima <- map(names_indep_vars, \(i) {
-  
-  ts <- main_indep_vars[[i]]
-  
-  auto.arima(ts,
-             d = diff_order[i],
-             lambda = 'auto',
-             max.order = 10)
-  
-})
+checkresiduals(model_arima1)
 
-names(main_arima) <- names_indep_vars
+xreg1 <- matrix(f$mean,
+                ncol = 1, dimnames = list(NULL,
+                                          c('assists') ))
 
-main_forecast_values <- as.data.table(
-  
-  map(names_indep_vars, \(i) {
-    
-    if (side == 'home') {
-      
-      f <- forecast(main_arima[[i]], h = cumsum(days_between_games_t1) %>% .[length(.)])
-      
-      round(f$mean, 0)[days_between_games_t1]
-      
-    } else {
-      
-      f <- forecast(main_arima[[i]], h = cumsum(days_between_games_t2) %>% .[length(.)])
-      
-      round(f$mean, 0)[days_between_games_t2]
-      
-    }
-    
-  })
-  
-)
+forecast(model_arima1, h = 17, xreg = xreg1) |> autoplot()
 
-colnames(main_forecast_values) <- names_indep_vars
-
-ts <- create_ts(DT, inc_name = inc_name)
-
-adf.test(ts)
-
-model_arima <- auto.arima(ts,
-                          d = 1, allowdrift = T, lambda = 'auto', max.order = 10,
-                          xreg = as.matrix(main_indep_vars))
-
-plot(dep_models$main_table_of_variables$two_point_field_goals_made, type = 'b', col = 'green')
-lines(dep_models$models_of_variables$two_point_field_goals_made$fitted, col = 'red')
-
-f <- forecast(model_arima, h = 10, xreg = as.matrix(main_forecast_values))
-
-autoplot(f)
-
-round(f$mean, 0)
-
-R2(model_arima$fitted, ts)
+forecast(model_arima1, h = 17, xreg = xreg1) |> as.data.table() |> round(0) %>% .[c(15, 17)]
 
 ####
 
-dep_inc_name <- names(model_lm1$coefficients)
+lm_1 <- lm(free_throws_attempted ~ 0 + assists,
+           data = DT$approximated_data)
 
-adf.test(DT$approximated_data[[inc_name]], k = 1)
+summary(lm_1)
 
-adf.test(diff(DT$approximated_data[[inc_name]]), k = 1)
+nlm <- nls(assists ~ a + cos(b) * defensive_rebounds + cos(c) *personal_fouls,
+           data = DT$approximated_data, start = list(a = 1, b = 1, c = 1), control = list(maxiter = 200))
 
-model_arima <- auto.arima(DT$approximated_data[[inc_name]],
-                          d = 0, allowdrift = T, lambda = 'auto', 
-                          xreg = as.matrix(DT$approximated_data[, ..names_indep_vars]))
+summary(nlm)
 
-plot(DT$approximated_data[[inc_name]], type = 'b', col = 'green')
-lines(model_arima$fitted, col = 'red')
+nlm_1 <- nls(assists ~ a + cos(b * defensive_rebounds) + cos(c * personal_fouls),
+             data = DT$approximated_data, start = list(a = 1, b = 1, c = 1), control = list(maxiter = 200))
 
-dt <- data.table(revd(10, location = mean(DT$approximated_data[[ dep_inc_name[1] ]] ) ),
-                 runif(10, 
-                       min(DT$approximated_data[[ dep_inc_name[2] ]] ), 
-                       max(DT$approximated_data[[ dep_inc_name[2] ]] ) )) |>
-  round(0)
-
-colnames(dt) <- dep_inc_name
-
-f1 <- forecast(model_arima, h = 10, 
-               xreg = rnorm(10,
-                            mean = mean(DT$approximated_data[[dep_inc_name]]),
-                            sd = sd(DT$approximated_data[[dep_inc_name]]) ) )
-
-adf.test(DT$approximated_data$two_point_field_goals_made, k = 1)
-
-model_arima1 <- auto.arima(DT$approximated_data$two_point_field_goals_made,
-                           d = 0, allowdrift = T, lambda = 'auto', 
-                           xreg =  DT$approximated_data[[inc_name]])
-
-plot(DT$approximated_data$two_point_field_goals_made, type = 'b', col = 'green')
-lines(model_arima1$fitted, col = 'red')
-
-f2 <- forecast(model_arima1, h = 10, xreg = f1$mean)
-
-autoplot(f2)
-
-f2$mean |> round(0)
+summary(nlm_1)
 
 #wb <- openxlsx::createWorkbook()
 

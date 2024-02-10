@@ -36,45 +36,32 @@ source(paste0(getwd(), "/forecasting.R"), local = T)
 #mean_int_table <- map_dfr(teams_id, \(i) mean_goals_int(table = table_tournament_result_soccer, sport = 1, table_team = table_team_data_soccer, i))
 
 ## Creation main table ----
-DT <- tab_for_an(team_name = team_name[2], st_name = '4th quarter',
-                 side = 'away', sport = 3, part = 4, date = Sys.Date() - 200)
+DT <- tab_for_an(team_name = team_name[1], st_name = '4th quarter', a = .01,
+                 side = 'home', sport = 3, part = 4, date = Sys.Date() - 200)
 
 ## Testing forecasting variables
 models <- creation_models(tbl = DT,
                           names_of_vars = DT$independent_variables,
-                          a = .05)
+                          a = .01,
+                          spline = F)
 
 forecast_models <- forecasting_models(tbl = DT,
-                                      h = max(cumsum(days_between_games_t2)),
+                                      h = max(cumsum(days_between_games_t1)[1:3]),
                                       names_of_vars = DT$independent_variables,
                                       models = models)
 
 ## Forecasting variables
 dep_models <- creation_models(tbl = DT,
-                              names_of_vars = inc_names[c(2, 4, 6)],
+                              names_of_vars = inc_names[c(1, 3, 5)],
                               indep_vars = F,
-                              a = .05)
+                              a = .01,
+                              spline = F)
 
-forecast_made_models <- forecasting_models(tbl = DT,
-                                           models = dep_models,
-                                           forecast_models1 = forecast_models$lower_values,
-                                           names_of_vars = inc_names[c(2, 4, 6)],
-                                           indep_vars = F,
-                                           h = max(cumsum(days_between_games_t2)))
+forecast_dep_models <- forecasting_models(tbl = DT,
+                                          models = dep_models,
+                                          forecast_models1 = forecast_models$mean_values,
+                                          names_of_vars = inc_names[c(1, 3, 5)],
+                                          indep_vars = F,
+                                          h = max(cumsum(days_between_games_t1)[1:3]))
 
-dt <- forecast_made_models$lower_values[days_between_games_t2] |>
-  mutate_all(as.numeric) |>
-  mutate(score_full = 2 * two_point_field_goals_made + 3 * three_point_field_goals_made + free_throws_made)
-
-dt1 <- forecast_made_models$mean_values[days_between_games_t2] |>
-  mutate_all(as.numeric) |>
-  mutate(score_full = 2 * two_point_field_goals_made + 3 * three_point_field_goals_made + free_throws_made)
-
-dt2 <- forecast_made_models$upper_values[days_between_games_t2] |>
-  mutate_all(as.numeric) |>
-  mutate(score_full = 2 * two_point_field_goals_made + 3 * three_point_field_goals_made + free_throws_made)
-
-dt
-dt1
-dt2
 #save.image(getwd(), "/", list.files(getwd(), pattern = ".RData"))

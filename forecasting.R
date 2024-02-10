@@ -19,6 +19,7 @@ side <- sides[2]
 creation_models <- function(tbl,
                             names_of_vars,
                             indep_vars = T,
+                            spline = F,
                             a = .05,
                             ...) {
   
@@ -27,7 +28,7 @@ creation_models <- function(tbl,
     
     map(colnames(tbl$approximated_data), \(i) {
       
-      create_ts(tbl = tbl, i, spline = F)
+      create_ts(tbl = tbl, i, spline = spline)
       
     })
     
@@ -35,48 +36,23 @@ creation_models <- function(tbl,
   
   colnames(table_of_vars) <- colnames(tbl$approximated_data)
   
-  ## Creation table of Dicky-Fuller's tests
-  main_adf <- map(names_of_vars, \(i) {
-    
-    ts <- table_of_vars[[i]]
-    
-    adf.test(ts) |> suppressWarnings()
-    
-  })
-  
-  names(main_adf) <- names_of_vars
-  
-  ## Creation of vectors of differentiation orders
-  diff_order <- map_int(names_of_vars, \(i) {
-    
-    if (main_adf[[i]]$p.value < a) {
-      
-      d_order <- 0
-      
-    } else {
-      
-      d_order <- 1
-      
-    }
-    
-  })
-  
-  names(diff_order) <- names_of_vars
-  
   ## Creation ARIMA models for independent variables
   main_arima <- map(names_of_vars, \(i) {
     
     ts <- table_of_vars[[i]]
     
-    dep_vars <- dep_vars(tbl = tbl, names_of_vars = i)[[i]]
+    dep_vars <- dep_vars(tbl = tbl, names_of_vars = i)
     
     if (isTRUE(indep_vars)) {
       
       auto.arima(ts,
-                 d = diff_order[i],
                  lambda = 'auto',
                  allowdrift = T,
                  allowmean = T,
+                 test.args = list(a = a),
+                 seasonal = T,
+                 seasonal.test.args = list(a = a,
+                                           max.D = 2),
                  ...) |> suppressWarnings()
       
     } else {
@@ -84,10 +60,13 @@ creation_models <- function(tbl,
       if (length(dep_vars) == 0) {
         
         auto.arima(ts,
-                   d = diff_order[i],
                    lambda = 'auto',
                    allowdrift = T,
                    allowmean = T,
+                   test.args = list(a = a,
+                                    max.D = 2),
+                   seasonal = T,
+                   seasonal.test.args = list(a = a),
                    ...) |> suppressWarnings()
         
       } else {
@@ -95,10 +74,13 @@ creation_models <- function(tbl,
         xreg <- as.matrix(table_of_vars |> select( all_of(dep_vars) ) )
         
         auto.arima(ts,
-                   d = diff_order[i],
                    lambda = 'auto',
                    allowdrift = T,
                    allowmean = T,
+                   test.args = list(a = a),
+                   seasonal = T,
+                   seasonal.test.args = list(a = a,
+                                             max.D = 2),
                    xreg = xreg,
                    ...) |> suppressWarnings()
         
@@ -110,13 +92,8 @@ creation_models <- function(tbl,
   
   names(main_arima) <- names_of_vars
   
-  table_main_adf <- t(as.data.table(main_adf))
-  
-  colnames(table_main_adf) <- c('statistic', 'lag.order', 'alternative', 'p.value', 'method', 'data.name')
-  
-  list('main_table_of_variables' = table_of_vars |> select(all_of(names_of_vars)),
-       'main_table_of_Dicky_Fullers_test' = table_main_adf,
-       'vector_of_differentiation_orders' = diff_order,
+  list('main_table' = table_of_vars,
+       'main_table_of_variables' = table_of_vars |> select(all_of(names_of_vars)),
        'models_of_variables' = main_arima)
   
   
