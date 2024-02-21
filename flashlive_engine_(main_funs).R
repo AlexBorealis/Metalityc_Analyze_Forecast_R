@@ -1,4 +1,4 @@
-# Main function for a sending the request ----
+# Main function for a sending the request
 get_data <- function(endpoints,
                      n = 1,
                      query = NULL,

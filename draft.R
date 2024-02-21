@@ -1,61 +1,149 @@
 # Testing methods ----
 
-DT <- tab_for_an(team_name = team_name[2], st_name = 'match',
-                 side = side, sport = 3, part = 4, date = Sys.Date() - 200)
+main_incident <- lm(reformulate(list_indep_vars$HOCKEY, response = 'away_score_full', intercept = F),
+                    data = DT_ts)
 
-indep_vars <- DT$indep_vars_correlation_matrix
+sum_main <- summary(main_incident)
 
-names_indep_vars <- colnames(DT$indep_vars_correlation_matrix)
+new_formula <- reformulate(names(sum_main$coefficients[, "Pr(>|t|)"] %>% .[. < .01]),
+                           response = 'away_score_full', intercept = F)
+
+new_model <- lm(new_formula, data = DT_ts)
+
+sum_new <- summary(new_model)
+
+sum_new
+
+predict(new_model, f_models$lower_values)[1]
+predict(new_model, f_models$mean_values)[1]
+predict(new_model, f_models$upper_values)[1]
+
+incident <- dependent_vars(DT_ts, dep_vars = 'dangerous_attacks')
+
+model_arima <- auto.arima(DT_ts$dangerous_attacks, biasadj = T, allowdrift = T, allowmean = T,
+                          xreg = as.matrix( DT_ts |> select(incident$dangerous_attacks$incidents) ))
+
+checkresiduals(models$models_of_variables$shots_on_goal)
+
+plot(DT_ts$shots_on_goal,
+     type = 'b', col = 'green')
+lines(models$models_of_variables$shots_on_goal$fitted, col = 'red')
+
+f <- forecast(model_arima, h = 16, 
+              xreg = as.matrix(forecast_models$mean_values |> select(incident$dangerous_attacks$incidents) ))
+
+autoplot(f)
+
+as.data.table(f) |> round()
 
 ####
 
-main_arima <- creation_models(DT, 'free_throws_attempted', a = .01)
-
-ts <- create_ts(DT, 'free_throws_attempted')
-
-model_arima <- auto.arima(ts, trace = T, lambda = 'auto', 
-                          test.args = list(a = .01), seasonal.test.args = list(a = .01, max.D = 2),
-                          allowdrift = T, allowmean = T, max.order = 10, seasonal = T,
-                          xreg = matrix(c(create_ts(DT, 'defensive_rebounds'), create_ts(DT, 'personal_fouls')),
-                                        ncol = 2, dimnames = list(NULL,
-                                                                  c('defensive_rebounds', 'personal_fouls') ) ) )
-
-checkresiduals(model_arima)
-  
-plot(ts,
+plot(DT_ts$corner_kicks,
      type = 'b', col = 'green')
-lines(dep_models$models_of_variables$free_throws_attempted$fitted |> round(0), col = 'red')
-points(x = cumsum(DT$approximated_data$days_between_games),
-       y = DT$approximated_data$assists,
-       col = 'blue')
+lines(models$models_of_variables$corner_kicks$fitted, col = 'red')
+
+f <- forecast(models$models_of_variables$corner_kicks, h = 15)
+
+autoplot(f)
 
 R2(ts, model_arima$fitted)
 
-xreg <- matrix(c(forecast(models$models_of_variables$defensive_rebounds, h = 17)$mean,
-                 forecast(models$models_of_variables$personal_fouls, h = 17)$mean),
-               ncol = 2, dimnames = list(NULL,
-                                         c('defensive_rebounds', 'personal_fouls') ))
+as.data.table(f) |> round(2)
 
-f <- forecast(main_arima$models_of_variables$free_throws_attempted, h = 19)
 
-ts1 <- create_ts(DT, 'free_throws_attempted')
 
-model_arima1 <- auto.arima(ts1, trace = T, lambda = 'auto', 
-                           test.args = list(a = .01), seasonal.test.args = list(a = .01, max.D = 2),
+ts1 <- create_ts(DT, 'blocked_shots')
+
+model_arima1 <- auto.arima(ts1, trace = T, lambda = 'auto', test.args = list(a = .05),
+                           seasonal.test.args = list(a = .01, max.D = 2),
                            allowdrift = T, allowmean = T, max.order = 10, seasonal = T,
-                           xreg = matrix(model_arima$fitted,
-                                         ncol = 1, dimnames = list(NULL,
-                                                                   c('assists') ) ) ) 
+                           xreg = NULL)
 
 checkresiduals(model_arima1)
 
-xreg1 <- matrix(f$mean,
-                ncol = 1, dimnames = list(NULL,
-                                          c('assists') ))
+plot(ts1,
+     type = 'b', col = 'green')
+lines(model_arima1$fitted, col = 'red')
 
-forecast(model_arima1, h = 17, xreg = xreg1) |> autoplot()
+f1 <- forecast(model_arima1, h = 1)
 
-forecast(model_arima1, h = 17, xreg = xreg1) |> as.data.table() |> round(0) %>% .[c(15, 17)]
+autoplot(f1)
+
+R2(ts1, model_arima1$fitted)
+
+as.data.table(f1) |> round(2)
+
+
+
+ts2 <- create_ts(DT, 'empty_net_goals')
+
+model_arima2 <- auto.arima(ts2, trace = T, lambda = 'auto', test.args = list(a = .05),
+                           seasonal.test.args = list(a = .01, max.D = 2),
+                           allowdrift = T, allowmean = T, max.order = 10, seasonal = T,
+                           xreg = NULL)
+
+checkresiduals(model_arima2)
+
+plot(ts2,
+     type = 'b', col = 'green')
+lines(round(model_arima2$fitted, 0), col = 'red')
+
+f2 <- forecast(model_arima2, h = 1)
+
+autoplot(f2)
+
+R2(ts2, model_arima2$fitted)
+
+as.data.table(f2) |> round(4)
+
+ts3 <- create_ts(DT, 'giveaways')
+
+model_arima3 <- auto.arima(ts3, trace = T, lambda = 'auto', test.args = list(a = .05),
+                           seasonal.test.args = list(a = .01, max.D = 2),
+                           allowdrift = T, allowmean = T, max.order = 10, seasonal = T,
+                           xreg = NULL)
+
+checkresiduals(model_arima3)
+
+plot(ts3,
+     type = 'b', col = 'green')
+lines(model_arima3$fitted, col = 'red')
+
+f3 <- forecast(model_arima3, h = 10)
+
+autoplot(f3)
+
+R2(ts3, model_arima3$fitted)
+
+as.data.table(f3) |> round(0)
+
+model_lm <- lm(shooting_pct ~ 0 + empty_net_goals + giveaways + saves_pct,
+               data = data.table(saves_pct = create_ts(DT, 'saves_pct', k = 100) / 100,
+                                 home_score_full = create_ts(DT, 'home_score_full'),
+                                 away_score_full = create_ts(DT, 'away_score_full'),
+                                 empty_net_goals = create_ts(DT, 'empty_net_goals'),
+                                 shooting_pct = create_ts(DT, 'shooting_pct', k = 100) / 100,
+                                 giveaways = create_ts(DT, 'giveaways'),
+                                 takeaways = create_ts(DT, 'takeaways'),
+                                 shots_on_goal = create_ts(DT, 'shots_on_goal'),
+                                 shots_off_goal = create_ts(DT, 'shots_off_goal')))
+
+sum_lm <- summary(model_lm)
+
+sum_lm
+
+predict(model_lm, newdata = data.table(shooting_pct = f2$lower[, "95%"])) |> round(0)
+predict(model_lm, newdata = data.table(shooting_pct = f2$mean)) |> round(0)
+
+model_rf <- randomForest(away_score_full ~ 0 + shooting_pct,
+                         data = data.table(away_score_full = create_ts(DT, 'away_score_full'),
+                                           shooting_pct = create_ts(DT, 'shooting_pct', k = 100) / 100,
+                                           giveaways = create_ts(DT, 'giveaways'),
+                                           days_between_games = create_ts(DT, 'days_between_games')))
+
+predict(model_rf, newdata = data.table(shooting_pct = f$mean)) |> round(0)
+
+
 
 ####
 
@@ -1097,21 +1185,21 @@ mardia(DT$cluster)
 KMO(DT$cluster)
 bartlett.test(DT$forecast)
 
-scree(DT$forecast)
-vss(DT$forecast)
-fa.parallel(DT$forecast)
+scree(DT_ts)
+vss(DT_ts)
+fa.parallel(DT_ts)
 
 nfactors(
   
-  cor(DT$forecast),
-  n.obs = nrow(DT$forecast)
+  cor(DT_ts),
+  n.obs = nrow(DT_ts)
   
 )
 
 FA <- fa(
   
-  DT$cluster,
-  nfactors = 2,
+  DT_ts,
+  nfactors = 10,
   rotate = 'cluster',
   scores = 'tenBerge'
   

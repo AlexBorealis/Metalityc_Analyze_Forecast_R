@@ -1,4 +1,4 @@
-# Getting table of tournaments from all world ----
+# Getting table of tournaments from all world
 fun_tournament_list_g <- function(loc = locale$locale[1],
                                   sport = 1) {
   
@@ -95,7 +95,7 @@ fun_tournament_list_g <- function(loc = locale$locale[1],
   
 } 
 
-# Getting table of events from 7 days ago to +7 days after today ----
+# Getting table of events from 7 days ago to +7 days after today
 fun_events_list_g <- function(loc = locale$locale[1],
                               tz = 3,
                               days,
@@ -217,7 +217,7 @@ fun_events_list_g <- function(loc = locale$locale[1],
   
 } 
 
-# Getting table of odds of current event ----
+# Getting table of odds of current event
 fun_event_odds_g <- function(loc = locale$locale[1],
                              ev_id,
                              sport = 1) {
@@ -346,7 +346,7 @@ fun_event_odds_g <- function(loc = locale$locale[1],
   
 } 
 
-# Getting table of results between opponents ----
+# Getting table of results between opponents
 fun_event_hth_g <- function(loc = locale$locale[1],
                             ev_id,
                             sport = 1) {
@@ -458,7 +458,7 @@ fun_event_hth_g <- function(loc = locale$locale[1],
   
 } 
 
-# Getting table of statistics between opponents ----
+# Getting table of statistics between opponents
 fun_event_statistics_g <- function(loc = locale$locale[1],
                                    ev_id,
                                    sport = 1) {

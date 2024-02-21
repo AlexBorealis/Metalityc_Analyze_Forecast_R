@@ -11,7 +11,7 @@ conflicts_prefer(dplyr::select(),
                  dplyr::lead(),
                  data.table::`:=`,
                  caret::R2(),
-                 EnvStats::predict())
+                 stats::predict())
 library(data.table, warn.conflicts = F)
 setDTthreads(0)
 library(stringr)
