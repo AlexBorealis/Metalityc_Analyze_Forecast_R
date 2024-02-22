@@ -12,26 +12,29 @@ standing_type <- data.table(read.table("standing_type_vars.txt", header = T)) # 
 
 sides <- c('home', 'away')
 
-team_name <- c('Pittsburgh Penguins', 'Los Angeles Kings')
+team_name <- c('Cleveland Cavaliers', 'Orlando Magic')
 
 list_indep_vars <- list(c('corner_kicks', 'fouls', 'goalkeeper_saves', 'free_kicks',
-                          'offsides', 'tackles', 'throw_ins', 'shots_off_goal', 'shots_on_goal',
-                          'total_passes', 'blocked_shots'),
-                        c('assists', 'blocks', 'defensive_rebounds',
-                          'offensive_rebounds', 'personal_fouls',
-                          'steals', 'technical_fouls', 'turnovers'),
-                        c('blocked_shots', 'empty_net_goals',
-                          'faceoffs_won', 'giveaways', 'goalkeeper_saves',
-                          'hits', 'penalties', 'power_play_goals', 
-                          'shorthanded_goals', 'takeaways', 'shots_off_goal', 'shots_on_goal'))
+                          'offsides', 'tackles', 'throw_ins', 'attacks', 'total_passes', 'blocked_shots'),
+                        c('assists', 'blocks', 'defensive_rebounds', 'offensive_rebounds',
+                          'personal_fouls', 'steals', 'technical_fouls', 'turnovers'),
+                        c('blocked_shots', 'empty_net_goals', 'faceoffs_won',
+                          'giveaways', 'goalkeeper_saves', 'hits', 'penalties', 
+                          'power_play_goals', 'shorthanded_goals', 'takeaways'))
 
 names(list_indep_vars) <- sport_list[id %in% c(1, 3, 4), name]
 
-list_dep_vars <- list(c('dangerous_attacks', 'goal_attempts', 'home_score_full', 'away_score_full'), 
-                      c('two_point_field_goals_made', 'three_point_field_goals_made', 'free_throws_made'),
-                      c('home_score_full', 'away_score_full'))
+list_dep_vars <- list(c('dangerous_attacks', 'shots_off_goal', 'shots_on_goal'), 
+                      c('two_point_field_g._attempted', 'three_point_field_g._attempted', 'free_throws_attempted'),
+                      c('shots_off_goal', 'shots_on_goal'))
 
 names(list_dep_vars) <- sport_list[id %in% c(1, 3, 4), name]
+
+list_result_vars <- list(c('home_score_full', 'away_score_full'), 
+                         c('two_point_field_goals_made', 'three_point_field_goals_made', 'free_throws_made'),
+                         c('home_score_full', 'away_score_full'))
+
+names(list_result_vars) <- sport_list[id %in% c(1, 3, 4), name]
 
 list_except_vars <- list(c('days_between_games', 'yellow_cards'),
                          c('two_point_field_goals', 'three_point_field_goals',

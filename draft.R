@@ -1,6 +1,7 @@
 # Testing methods ----
 
-main_incident <- lm(reformulate(list_indep_vars$HOCKEY, response = 'away_score_full', intercept = F),
+main_incident <- lm(reformulate(list_indep_vars$HOCKEY, 
+                                response = 'away_score_full', intercept = F),
                     data = DT_ts)
 
 sum_main <- summary(main_incident)
@@ -14,23 +15,16 @@ sum_new <- summary(new_model)
 
 sum_new
 
-predict(new_model, f_models$lower_values)[1]
-predict(new_model, f_models$mean_values)[1]
-predict(new_model, f_models$upper_values)[1]
+model_arima <- auto.arima(DT_ts$away_score_full, biasadj = T, allowdrift = T, allowmean = T,
+                          xreg = as.matrix( select(DT_ts, rownames(sum_new$coefficients)) ))
 
-incident <- dependent_vars(DT_ts, dep_vars = 'dangerous_attacks')
+checkresiduals(model_arima)
 
-model_arima <- auto.arima(DT_ts$dangerous_attacks, biasadj = T, allowdrift = T, allowmean = T,
-                          xreg = as.matrix( DT_ts |> select(incident$dangerous_attacks$incidents) ))
-
-checkresiduals(models$models_of_variables$shots_on_goal)
-
-plot(DT_ts$shots_on_goal,
+plot(DT_ts$away_score_full,
      type = 'b', col = 'green')
-lines(models$models_of_variables$shots_on_goal$fitted, col = 'red')
+lines(model_arima$fitted, col = 'red')
 
-f <- forecast(model_arima, h = 16, 
-              xreg = as.matrix(forecast_models$mean_values |> select(incident$dangerous_attacks$incidents) ))
+f <- forecast(model_arima, xreg = as.matrix( select(f_models$mean_values, rownames(sum_new$coefficients)) ))
 
 autoplot(f)
 

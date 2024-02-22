@@ -190,44 +190,69 @@ tab_for_an <- function(side = 'home',
 }
 
 create_ts <- function(tbl,
-                      inc_name,
+                      except_vars,
+                      indep_vars = NULL,
+                      all_vars = T,
                       spline = F,
+                      sport = 1,
                       days = 20,
                       k = 100) {
   
-  num_observ <- cumsum(tbl$approximated_data[days_between_games < days, days_between_games])
-  
-  observ <- tbl$approximated_data[days_between_games < days][[inc_name]]
-  
-  if (all(observ > 0 & observ < 1)) {
+  if (isTRUE(all_vars)) {
     
-    dt_for_join <- data.table(t = num_observ,
-                              event = observ * k)
+    map_args <- colnames( select(tbl$approximated_data, -except_vars[[sport_list[id == sport, name]]]) )
     
   } else {
     
-    dt_for_join <- data.table(t = num_observ,
-                              event = observ)
+    map_args <- indep_vars
     
   }
   
-  if (isFALSE(spline)) {
+  main_dt <-  as.data.table(
     
-    dt <- data.table(t = 1:num_observ[length(num_observ)]) |>
-      left_join(dt_for_join, by = 't') %>%
-      .[, map(.SD, \(i) round( zoo::na.approx(i, na.rm = F), 0) ), .SDcols = colnames(.)] |>
-      na.omit()
+    map(map_args, \(i) {
+      
+      num_observ <- cumsum(tbl$approximated_data[days_between_games < days, days_between_games])
+      
+      observ <- tbl$approximated_data[days_between_games < days][[i]]
+      
+      if (all(observ > 0 & observ < 1)) {
+        
+        dt_for_join <- data.table(t = num_observ,
+                                  event = observ * k)
+        
+      } else {
+        
+        dt_for_join <- data.table(t = num_observ,
+                                  event = observ)
+        
+      }
+      
+      if (isFALSE(spline)) {
+        
+        dt <- data.table(t = 1:num_observ[length(num_observ)]) |>
+          left_join(dt_for_join, by = 't') %>%
+          .[, map(.SD, \(i) round( zoo::na.approx(i, na.rm = F), 0) ), .SDcols = colnames(.)] |>
+          na.omit()
+        
+      } else {
+        
+        dt <- data.table(t = 1:num_observ[length(num_observ)]) |>
+          left_join(dt_for_join, by = 't') %>%
+          .[, map(.SD, \(i) round( zoo::na.spline(i, na.rm = F), 0) ), .SDcols = colnames(.)] |>
+          na.omit() |>
+          filter(t > min(num_observ))
+        
+      }
+      
+      ts(dt$event)
+      
+    })
     
-  } else {
-    
-    dt <- data.table(t = 1:num_observ[length(num_observ)]) |>
-      left_join(dt_for_join, by = 't') %>%
-      .[, map(.SD, \(i) round( zoo::na.spline(i, na.rm = F), 0) ), .SDcols = colnames(.)] |>
-      na.omit() |>
-      filter(t > min(num_observ))
-    
-  }
+  )
   
-  ts(dt$event)
+  colnames(main_dt) <- map_args
+  
+  main_dt
   
 }

@@ -122,13 +122,13 @@ forecasting_models <- function(tbl,
           
           if (is.null(forecast_models2)) {
             
-            xreg <- as.matrix( forecast_models1 |>
+            xreg <- as.matrix( forecast_models1$lower_value |>
                                  select( all_of(dep_vars) ) )
             
           } else {
             
-            xreg <- as.matrix( forecast_models1 |>
-                                 cbind(forecast_models2) |>
+            xreg <- as.matrix( forecast_models1$lower_value |>
+                                 cbind(forecast_models2$lower_value) |>
                                  select( all_of(dep_vars) ) )
             
           }
@@ -181,13 +181,13 @@ forecasting_models <- function(tbl,
           
           if (is.null(forecast_models2)) {
             
-            xreg <- as.matrix( forecast_models1 |>
+            xreg <- as.matrix( forecast_models1$mean_value |>
                                  select( all_of(dep_vars) ) )
             
           } else {
             
-            xreg <- as.matrix( forecast_models1 |>
-                                 cbind(forecast_models2) |>
+            xreg <- as.matrix( forecast_models1$mean_value |>
+                                 cbind(forecast_models2$mean_value) |>
                                  select( all_of(dep_vars) ) )
             
           }
@@ -240,14 +240,14 @@ forecasting_models <- function(tbl,
           
           if (is.null(forecast_models2)) {
             
-            xreg <- as.matrix( forecast_models1 |>
-                                 select( dep_vars ) )
+            xreg <- as.matrix( forecast_models1$upper_value |>
+                                 select( all_of(dep_vars) ) )
             
           } else {
             
-            xreg <- as.matrix( forecast_models1 |>
-                                 cbind(forecast_models2) |>
-                                 select( dep_vars ) )
+            xreg <- as.matrix( forecast_models1$upper_value |>
+                                 cbind(forecast_models2$upper_value) |>
+                                 select( all_of(dep_vars) ) )
             
           }
           
@@ -290,25 +290,31 @@ forecasting_models <- function(tbl,
 getting_scores <- function(tbl,
                            indep_vars,
                            dep_vars,
-                           forecast_models,
+                           forecast_models1,
+                           forecast_models2,
                            level_value = 1,
                            sport = 1) {
   
-  if (sport %in% c(1, 4)) {
+  dep_vars_for_predict <- dependent_vars(tbl = tbl, dep_vars = dep_vars, indep_vars = indep_vars, sport = sport)
+  
+  values <- c('lower_values', 'mean_values', 'upper_values')
+  
+  predict_table <- as.data.table(
     
-    dep_vars_for_predict <- dependent_vars(tbl = tbl, dep_vars = dep_vars, indep_vars = indep_vars, sport = sport)
-    
-    values <- c('lower_values', 'mean_values', 'upper_values')
-    
-    predict_table <- as.data.table(
+    map(names(dep_vars_for_predict), \(i) {
       
-      map(names(dep_vars_for_predict), \(i) floor( predict(dep_vars_for_predict[[i]]$model, 
-                                                           forecast_models[[values[level_value]]]) ) )
+      floor( predict(dep_vars_for_predict[[i]]$model, 
+                     cbind(forecast_models1[[values[level_value]]],
+                           forecast_models2[[values[level_value]]])) )
       
-    ) |> rename_all(~ names(dep_vars_for_predict))
+    } )
     
-    cbind(forecast_models[[values[level_value]]], predict_table) %>% replace(. < 0, 0)
+  ) |> rename_all(~ names(dep_vars_for_predict))
+  
+  cbind(
     
-  }
+    cbind(forecast_models1[[values[level_value]]], forecast_models2[[values[level_value]]]), predict_table
+    
+  ) %>% replace(. < 0, 0)
   
 }
