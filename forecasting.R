@@ -1,20 +1,18 @@
 ## Function for a creation of models of independent variables
-creation_models <- function(tbl,
-                            names_of_vars,
-                            indep_vars = NULL,
-                            bool_indep_vars = T,
-                            spline = F,
-                            sport = 1,
-                            a = .05,
-                            ...) {
+creation_models_arima <- function(tbl,
+                                  ts_vars,
+                                  spline = F,
+                                  sport = 1,
+                                  a = .05,
+                                  ...) {
   
-  if (is.list(names_of_vars)) {
+  if (is.list(ts_vars)) {
     
-    map_args <- names_of_vars[[sport_list[id == sport, name]]]
+    map_args <- ts_vars[[sport_list[id == sport, name]]]
     
   } else {
     
-    map_args <- names_of_vars
+    map_args <- ts_vars
     
   }
   
@@ -23,76 +21,39 @@ creation_models <- function(tbl,
     
     ts <- tbl[[i]]
     
-    if (isTRUE(bool_indep_vars)) {
-      
-      auto.arima(ts,
-                 allowdrift = T,
-                 allowmean = T,
-                 test.args = list(a = a),
-                 seasonal.test.args = list(a = a,
-                                           max.D = 2),
-                 ...) |> suppressWarnings()
-      
-    } else {
-      
-      dep_vars <- dependent_vars(tbl = tbl, indep_vars = indep_vars, sport = sport, dep_vars = i)[[i]]$incidents
-      
-      if (length(dep_vars) == 0) {
-        
-        auto.arima(ts,
-                   allowdrift = T,
-                   allowmean = T,
-                   test.args = list(a = a,
-                                    max.D = 2),
-                   seasonal.test.args = list(a = a),
-                   ...) |> suppressWarnings()
-        
-      } else {
-        
-        xreg <- as.matrix(tbl |> select( all_of(dep_vars) ) )
-        
-        auto.arima(ts,
-                   allowdrift = T,
-                   allowmean = T,
-                   test.args = list(a = a),
-                   seasonal.test.args = list(a = a,
-                                             max.D = 2),
-                   xreg = xreg,
-                   ...) |> suppressWarnings()
-        
-      }
-      
-    }
+    auto.arima(ts,
+               allowdrift = T,
+               allowmean = T,
+               test.args = list(a = a),
+               seasonal.test.args = list(a = a,
+                                         max.D = 2),
+               ...) |> suppressWarnings()
     
   })
   
   names(main_arima) <- map_args[map_args %in% colnames(tbl)]
   
-  return(list('models_of_variables' = main_arima))
+  return(main_arima)
   
   gc(reset = T, full = T)
   
 }
 
 ## Function for a creation of forecasting values of independent variables
-forecasting_models <- function(tbl,
-                               names_of_vars,
-                               models,
-                               sport = 1,
-                               h = 15,
-                               bool_indep_vars = T,
-                               indep_vars = NULL,
-                               forecast_models1 = NULL,
-                               forecast_models2 = NULL,
-                               ...) {
+forecasting_models_arima <- function(tbl,
+                                     ts_vars,
+                                     models,
+                                     sport = 1,
+                                     h = 15,
+                                     ...) {
   
-  if (is.list(names_of_vars)) {
+  if (is.list(ts_vars)) {
     
-    map_args <- names_of_vars[[sport_list[id == sport, name]]]
+    map_args <- ts_vars[[sport_list[id == sport, name]]]
     
   } else {
     
-    map_args <- names_of_vars
+    map_args <- ts_vars
     
   }
   
@@ -102,53 +63,25 @@ forecasting_models <- function(tbl,
     
     map(map_args[map_args %in% colnames(tbl)], \(i) {
       
-      if (isTRUE(bool_indep_vars)) {
-        
-        f <- forecast(models$models_of_variables[[i]], 
-                      h = h,
-                      ...)
-        
-      } else {
-        
-        dep_vars <- dependent_vars(tbl = tbl, indep_vars = indep_vars, sport = sport, dep_vars = i)[[i]]$incidents
-        
-        if (length(dep_vars) == 0) {
-          
-          f <- forecast(models$models_of_variables[[i]], 
-                        h = h,
-                        ...)
-          
-        } else {
-          
-          if (is.null(forecast_models2)) {
-            
-            xreg <- as.matrix( forecast_models1$lower_value |>
-                                 select( all_of(dep_vars) ) )
-            
-          } else {
-            
-            xreg <- as.matrix( forecast_models1$lower_value |>
-                                 cbind(forecast_models2$lower_value) |>
-                                 select( all_of(dep_vars) ) )
-            
-          }
-          
-          f <- forecast(models$models_of_variables[[i]], 
-                        h = h,
-                        ...,
-                        xreg = xreg)
-          
-        }
-        
-      }
+      f <- forecast(models[[i]], 
+                    h = h,
+                    ...)
       
-      if (any(as.numeric(f$lower[, 1]) <= 0)) {
+      if (any(as.numeric(f$lower[, 1]) <= 0 | is.na(as.numeric(f$lower[, 1])))) {
         
         0
         
       } else {
         
-        round(f$lower[, 1], 0)
+        if (i == 'expected_goals') {
+          
+          round(f$lower[, 1], 2)
+          
+        } else {
+          
+          round(f$lower[, 1], 0)
+          
+        }
         
       }
       
@@ -161,53 +94,25 @@ forecasting_models <- function(tbl,
     
     map(map_args[map_args %in% colnames(tbl)], \(i) {
       
-      if (isTRUE(bool_indep_vars)) {
-        
-        f <- forecast(models$models_of_variables[[i]], 
-                      h = h,
-                      ...)
-        
-      } else {
-        
-        dep_vars <- dependent_vars(tbl = tbl, indep_vars = indep_vars, sport = sport, dep_vars = i)[[i]]$incidents
-        
-        if (length(dep_vars) == 0) {
-          
-          f <- forecast(models$models_of_variables[[i]], 
-                        h = h,
-                        ...)
-          
-        } else {
-          
-          if (is.null(forecast_models2)) {
-            
-            xreg <- as.matrix( forecast_models1$mean_value |>
-                                 select( all_of(dep_vars) ) )
-            
-          } else {
-            
-            xreg <- as.matrix( forecast_models1$mean_value |>
-                                 cbind(forecast_models2$mean_value) |>
-                                 select( all_of(dep_vars) ) )
-            
-          }
-          
-          f <- forecast(models$models_of_variables[[i]], 
-                        h = h,
-                        xreg = xreg,
-                        ...)
-          
-        }
-        
-      }
+      f <- forecast(models[[i]], 
+                    h = h,
+                    ...)
       
-      if (any(as.numeric(f$mean) <= 0)) {
+      if (any(as.numeric(f$mean) <= 0 | is.na(as.numeric(f$mean)) )) {
         
         0
         
       } else {
         
-        round(f$mean, 0)
+        if (i == 'expected_goals') {
+          
+          round(f$mean, 2)
+          
+        } else {
+          
+          round(f$mean, 0)
+          
+        }
         
       }
       
@@ -220,53 +125,25 @@ forecasting_models <- function(tbl,
     
     map(map_args[map_args %in% colnames(tbl)], \(i) {
       
-      if (isTRUE(bool_indep_vars)) {
-        
-        f <- forecast(models$models_of_variables[[i]], 
-                      h = h,
-                      ...)
-        
-      } else {
-        
-        dep_vars <- dependent_vars(tbl = tbl, indep_vars = indep_vars, sport = sport, dep_vars = i)[[i]]$incidents
-        
-        if (length(dep_vars) == 0) {
-          
-          f <- forecast(models$models_of_variables[[i]], 
-                        h = h,
-                        ...)
-          
-        } else {
-          
-          if (is.null(forecast_models2)) {
-            
-            xreg <- as.matrix( forecast_models1$upper_value |>
-                                 select( all_of(dep_vars) ) )
-            
-          } else {
-            
-            xreg <- as.matrix( forecast_models1$upper_value |>
-                                 cbind(forecast_models2$upper_value) |>
-                                 select( all_of(dep_vars) ) )
-            
-          }
-          
-          f <- forecast(models$models_of_variables[[i]], 
-                        h = h,
-                        xreg = xreg,
-                        ...)
-          
-        }
-        
-      }
+      f <- forecast(models[[i]], 
+                    h = h,
+                    ...)
       
-      if (any(as.numeric(f$upper[, 1]) <= 0)) {
+      if (any(as.numeric(f$upper[, 1]) <= 0 | is.na(as.numeric(f$upper[, 1])) )) {
         
         0
         
       } else {
         
-        round(f$upper[, 1], 0)
+        if (i == 'expected_goals') {
+          
+          round(f$upper[, 1], 2)
+          
+        } else {
+          
+          round(f$upper[, 1], 0)
+          
+        }
         
       }
       
@@ -286,35 +163,77 @@ forecasting_models <- function(tbl,
   
 }
 
-## Function for a creation models for a dependent variables of 2nd level
-getting_scores <- function(tbl,
-                           indep_vars,
-                           dep_vars,
-                           forecast_models1,
-                           forecast_models2,
-                           level_value = 1,
-                           sport = 1) {
+## Function for a creation of models of independent variables
+forecasting_models_rf <- function(tbl,
+                                  indep_vars,
+                                  dep_vars,
+                                  forecast_models,
+                                  side = 'home',
+                                  level_value = 1,
+                                  levels_factor = 2,
+                                  sport = 1,
+                                  ...) {
   
-  dep_vars_for_predict <- dependent_vars(tbl = tbl, dep_vars = dep_vars, indep_vars = indep_vars, sport = sport)
+  if (is.list(dep_vars)) {
+    
+    map_args <- dep_vars[[sport_list[id == sport, name]]]
+    
+  } else {
+    
+    map_args <- dep_vars
+    
+  }
+  
+  terms <- dependent_vars(tbl = tbl, indep_vars = indep_vars, dep_vars = dep_vars, sport = sport)
   
   values <- c('lower_values', 'mean_values', 'upper_values')
   
   predict_table <- as.data.table(
     
-    map(names(dep_vars_for_predict), \(i) {
+    map(map_args, \(i) {
       
-      floor( predict(dep_vars_for_predict[[i]]$model, 
-                     cbind(forecast_models1[[values[level_value]]],
-                           forecast_models2[[values[level_value]]])) )
+      if (length(levels(as.factor(tbl[[i]]))) < levels_factor) tbl[[i]] <- as.factor(tbl[[i]])
+      
+      rf_formula <- reformulate(termlabels = terms[[i]]$incidents, response = i, intercept = F)
+      
+      dep_vars_for_predict <- randomForest(rf_formula, data = tbl, ...) |> suppressWarnings()
+      
+      if (i == 'expected_goals') {
+        
+        round( predict(dep_vars_for_predict, forecast_models[[values[level_value]]]), 2)
+        
+      } else {
+        
+        if (is.factor(tbl[[i]])) {
+          
+          predict(dep_vars_for_predict, forecast_models[[values[level_value]]])
+          
+        } else {
+          
+          floor( predict(dep_vars_for_predict, forecast_models[[values[level_value]]]) )
+          
+        }
+        
+      }
       
     } )
     
-  ) |> rename_all(~ names(dep_vars_for_predict))
+  ) %>% rename_all(~ map_args)
   
-  cbind(
+  if (side == 'home') {
     
-    cbind(forecast_models1[[values[level_value]]], forecast_models2[[values[level_value]]]), predict_table
+    cbind(forecast_models[[values[level_value]]], predict_table) %>%
+      replace(. < 0, 0) %>%
+      select(-away_score_full) %>%
+      suppressWarnings()
     
-  ) %>% replace(. < 0, 0)
+  } else {
+    
+    cbind(forecast_models[[values[level_value]]], predict_table) %>%
+      replace(. < 0, 0) %>%
+      select(-home_score_full) %>%
+      suppressWarnings()
+    
+  }
   
 }

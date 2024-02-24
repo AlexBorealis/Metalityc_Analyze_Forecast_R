@@ -232,14 +232,14 @@ create_ts <- function(tbl,
         
         dt <- data.table(t = 1:num_observ[length(num_observ)]) |>
           left_join(dt_for_join, by = 't') %>%
-          .[, map(.SD, \(i) round( zoo::na.approx(i, na.rm = F), 0) ), .SDcols = colnames(.)] |>
+          .[, map(.SD, \(i) zoo::na.approx(i, na.rm = F) ), .SDcols = colnames(.)] |>
           na.omit()
         
       } else {
         
         dt <- data.table(t = 1:num_observ[length(num_observ)]) |>
           left_join(dt_for_join, by = 't') %>%
-          .[, map(.SD, \(i) round( zoo::na.spline(i, na.rm = F), 0) ), .SDcols = colnames(.)] |>
+          .[, map(.SD, \(i) zoo::na.spline(i, na.rm = F) ), .SDcols = colnames(.)] |>
           na.omit() |>
           filter(t > min(num_observ))
         
@@ -253,6 +253,19 @@ create_ts <- function(tbl,
   
   colnames(main_dt) <- map_args
   
-  main_dt
+  if (sport == 1) {
+    
+    main_dt %>%
+      mutate_at(vars(-matches('expected_goals')), .funs = ~ round(., 0)) %>%
+      mutate_at(vars(matches('expected_goals')), .funs = ~ round(., 2)) %>%
+      mutate(days_between_game = 1:nrow(main_dt))
+    
+  } else {
+    
+    main_dt %>%
+      mutate_at(vars(-matches('expected_goals')), .funs = ~ round(., 0)) %>%
+      mutate(days_between_game = 1:nrow(main_dt))
+    
+  }
   
 }

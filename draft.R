@@ -1,44 +1,75 @@
 # Testing methods ----
 
-main_incident <- lm(reformulate(list_indep_vars$HOCKEY, 
-                                response = 'away_score_full', intercept = F),
+relation_three_two <- DT_ts$three_point_field_g._attempted/DT_ts$two_point_field_g._attempted
+
+model_arima <- auto.arima(relation_three_two, allowdrift = T, lambda = 'auto', biasadj = T)
+
+forecast(model_arima) |> autoplot()
+
+model_arima1 <- auto.arima(DT_ts$two_point_field_g._attempted, allowdrift = T, lambda = 'auto', biasadj = T)
+
+forecast(model_arima1) |> autoplot()
+
+model_arima2 <- auto.arima(DT_ts$three_point_field_g._attempted, allowdrift = T, lambda = 'auto', biasadj = T,
+                           xreg = NULL)
+
+forecast(model_arima2) |> autoplot()
+
+model_arima3 <- auto.arima(DT_ts$two_point_field_goals_made, allowdrift = T, lambda = 'auto', biasadj = T)
+
+forecast(model_arima3) |> autoplot()
+
+model_arima4 <- auto.arima(DT_ts$three_point_field_goals_made, allowdrift = T, lambda = 'auto', biasadj = T,
+                           xreg = NULL)
+
+forecast(model_arima4) |> autoplot()
+
+model_arima5 <- auto.arima(DT_ts$free_throws_made, allowdrift = T, lambda = 'auto', biasadj = T,
+                           xreg = NULL)
+
+forecast(model_arima5) |> autoplot()
+
+randomForest(two_point_field_goals_made ~ 0 + two_point_field_g._attempted + assists +
+               turnovers + blocks + offensive_rebounds + personal_fouls,
+             data = DT_ts)
+
+rf <- randomForest(reformulate(list_indep_vars$BASKETBALL,
+                               response = 'two_point_field_goals_made', intercept = F),
+                   data = DT_ts)
+
+rf1 <- randomForest(reformulate(list_indep_vars$HOCKEY[c(2, 6:8)],
+                                response = 'home_score_full', intercept = F),
                     data = DT_ts)
 
-sum_main <- summary(main_incident)
+summary(lm(reformulate(list_indep_vars$HOCKEY[c(2, 6:8)],
+                       response = 'home_score_full', intercept = F),
+           data = DT_ts))
 
-new_formula <- reformulate(names(sum_main$coefficients[, "Pr(>|t|)"] %>% .[. < .01]),
-                           response = 'away_score_full', intercept = F)
 
-new_model <- lm(new_formula, data = DT_ts)
+predict(rf1, indep_models_f$mean_values)
 
-sum_new <- summary(new_model)
+model_arima <- auto.arima(DT_ts$home_score_full, lambda = 'auto', biasadj = T,
+                          seasonal = T, xreg = as.matrix( select(DT_ts,
+                                                                 list_indep_vars$HOCKEY[c(2, 6:8)]) ), allowdrift = T)
 
-sum_new
-
-model_arima <- auto.arima(DT_ts$away_score_full, biasadj = T, allowdrift = T, allowmean = T,
-                          xreg = as.matrix( select(DT_ts, rownames(sum_new$coefficients)) ))
+forecast(model_arima, h = 4, xreg = as.matrix( select(indep_models_f$mean_values,
+                                                      list_indep_vars$HOCKEY[c(2, 6:8)]) )) |> autoplot()
 
 checkresiduals(model_arima)
 
-plot(DT_ts$away_score_full,
-     type = 'b', col = 'green')
-lines(model_arima$fitted, col = 'red')
-
-f <- forecast(model_arima, xreg = as.matrix( select(f_models$mean_values, rownames(sum_new$coefficients)) ))
-
-autoplot(f)
-
-as.data.table(f) |> round()
-
 ####
 
-plot(DT_ts$corner_kicks,
+plot(DT_ts$three_point_field_g._attempted/DT_ts$two_point_field_g._attempted,
      type = 'b', col = 'green')
-lines(models$models_of_variables$corner_kicks$fitted, col = 'red')
+lines(DT_ts$assists, col = 'red')
 
-f <- forecast(models$models_of_variables$corner_kicks, h = 15)
+f <- forecast(dep_models$three_point_field_g._attempted, h = 10, 
+              xreg = as.matrix( cbind(indep_models_f$mean_values, 
+                                      data.table(days_between_game = 1:nrow(f_models$mean_values))) ))
 
 autoplot(f)
+
+as.data.table(f)[8] |> round()
 
 R2(ts, model_arima$fitted)
 

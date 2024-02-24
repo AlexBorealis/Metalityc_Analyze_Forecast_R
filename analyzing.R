@@ -75,17 +75,28 @@ dependent_vars <- function(tbl,
     
     sum_inital_model <- summary(initial_model)
     
-    results_coef <- sum_inital_model$coefficients[, "Pr(>|t|)"] %>% .[. < .05]
+    results_coef <- sum_inital_model$coefficients[, "Pr(>|t|)"] %>% .[. < .01]
     
     results_formula <- reformulate(names(results_coef), response = i, intercept = F)
     
-    new_model <- lm(results_formula,
-                    data = DT_ts)
+    new_model <- lm(results_formula, data = tbl)
     
-    new_model_formula <- reformulate(rownames(summary(new_model)$coefficients), response = i, intercept = F)
+    sum_new_model <- summary(new_model)
+    
+    while (isTRUE(any(sum_new_model$coefficients[, "Pr(>|t|)"] > .01))) {
+      
+      results_coef <- sum_new_model$coefficients[, "Pr(>|t|)"] %>% .[. < .01]
+      
+      results_formula <- reformulate(names(results_coef), response = i, intercept = F)
+      
+      new_model <- lm(results_formula, data = tbl)
+      
+      sum_new_model <- summary(new_model)
+      
+    }
     
     list('incidents' = rownames(summary(new_model)$coefficients),
-         'formula' = new_model_formula,
+         'formula' = results_formula,
          'model' = new_model)
     
   })
